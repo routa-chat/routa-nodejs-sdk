@@ -1,0 +1,79 @@
+{
+  "name": "@routa-chat/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for Routa — messaging infrastructure, starting with WhatsApp.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/routa-chat/routa-nodejs-sdk.git"
+  },
+  "homepage": "https://github.com/routa-chat/routa-nodejs-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/routa-chat/routa-nodejs-sdk/issues"
+  },
+  "author": "routa-chat (https://github.com/routa-chat)",
+  "keywords": [
+    "routa",
+    "whatsapp",
+    "whatsapp-api",
+    "whatsapp-business",
+    "messaging",
+    "webhook",
+    "sdk",
+    "typescript"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.4.1",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:types": "vitest --typecheck --run tests/types",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:types && pnpm run build",
+    "prepublishOnly": "pnpm run check",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@biomejs/biome": "^2.5.13",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
+    "@types/node": "^22.20.2",
+    "publint": "^0.3.24",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}
