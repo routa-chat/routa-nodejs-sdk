@@ -1,0 +1,99 @@
+name: Pull Request Check
+
+# Two events feed one workflow instead of two separate files: `pull_request_target`
+# runs with base-branch permissions and secrets (needed by validate-title/validate-body
+# to post their status), while `check`/`package` run on the safer `pull_request` event
+# since they execute the PR's own code. Each job below filters itself to the one event
+# it's meant for via `if: github.event_name == …`, so a single PR update triggers each
+# job exactly once, never both.
+on:
+  pull_request:
+    branches: [master]
+  pull_request_target:
+    branches: [master]
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-title:
+    name: Validate PR title
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            release
+            refactor
+            test
+          ignoreLabels: |
+            bot
+
+  validate-body:
+    name: Validate PR body
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: JJ/github-pr-contains-action@releases/v14.1
+        with:
+          github-token: ${{ github.token }}
+          bodyDoesNotContain: ""
+          waivedUsers: "dependabot[bot]|bot"
+
+  check:
+    name: check (Node ${{ matrix.node-version }})
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # typecheck + lint + test + test:types + build — the one script both this
+      # job and a contributor's own machine run, so CI never diverges from `pnpm run check`.
+      - run: pnpm run check
+
+  package:
+    name: Package (publint + attw)
+    if: github.event_name == 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: npm pack --dry-run
+        run: npm pack --dry-run
+      # --level error: only report/fail on real errors, not publint's warnings or suggestions.
+      - name: publint
+        run: pnpm exec publint --level error
+      # attw has no separate warning tier — any problem it finds fails this step.
+      - name: Are the types wrong?
+        run: pnpm exec attw --pack .
