@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# contents:write      — pushes the "Version Packages" branch/commit, pushes the release git
+#                        tag, and creates the GitHub Release.
+# pull-requests:write — changesets/action opens/updates the "Version Packages" PR.
+# id-token:write      — required for npm's OIDC trusted-publishing exchange. No NPM_TOKEN or
+#                        NODE_AUTH_TOKEN is set anywhere in this workflow (see
+#                        .github/RELEASE_BOOTSTRAP.md), so this is the only credential publish
+#                        can use.
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          # registry-url is what makes npm's OIDC trusted-publishing exchange activate for
+          # this registry — required even though no token is configured below.
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # Re-run the full gate here rather than trusting the PR's own check run —
+      # a push to master (e.g. a squash-merge) never re-triggers pull-request-check.yml.
+      - run: pnpm run check
+
+      # Only used for the "Version Packages" PR here, not for publishing (see the next
+      # steps): changesets/action's own `publish` input captures the publish script's
+      # output inside its own process and never writes it anywhere a later step could grep,
+      # which the OIDC-fallback guard below needs. It also decides what got published by
+      # matching a "New tag:" line in that output — a string @changesets/cli 3.x no longer
+      # prints (it prints "Created git tags:" instead) — so `published`/`publishedPackages`
+      # would stay empty and no GitHub Release would ever be created, even after a real
+      # publish. Publishing is handled explicitly by the steps below instead.
+      - name: Version packages
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm run version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # hasChangesets == 'false' means there's nothing left to version: either this push just
+      # merged the "Version Packages" PR and packages are waiting to go out, or there was
+      # never anything pending. `changeset publish` is a safe no-op in the latter case — it
+      # only publishes versions that aren't already on npm.
+      #
+      # package.json's `publishConfig.provenance: true` is redundant here: under OIDC trusted
+      # publishing, npm attaches provenance on its own, with no flag or config needed. It's
+      # left in package.json only as documentation of intent, in case this ever publishes
+      # from somewhere that isn't a trusted-publishing OIDC exchange.
+      - name: Publish to npm
+        id: publish
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          set -o pipefail
+          pnpm run release 2>&1 | tee publish.log
+
+      # `changeset publish` (above) tags a newly published version locally as
+      # `<name>@<version>` but never pushes it. A tag that exists locally but not on the
+      # remote is exactly what "this run just published something new" looks like, and is
+      # the only reliable way to tell a real publish apart from `changeset publish`'s
+      # no-op (nothing was pending) — both leave `pnpm run release` exiting 0 with nothing
+      # further downstream to act on.
+      - name: Detect whether this run published a new version
+        id: detect
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          tag="${name}@${version}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if git rev-parse "$tag" >/dev/null 2>&1 && ! git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Secondary guard, not the main one (see "Verify published version and OIDC
+      # provenance" below for that). pnpm's own OIDC exchange
+      # (fetchTokenAndProvenanceByOidc in its publishPackedPkg.ts) logs "Skipped OIDC: ..."
+      # only on its *error* branches, and falls back to any static credential it finds in
+      # the environment — still exiting 0. There's no corresponding string logged on
+      # success, so this grep can only prove failure, never prove success; a clean grep
+      # here is not on its own evidence that trusted publishing happened.
+      - name: Guard against a known silent OIDC fallback (secondary check)
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          if grep -qi "skipped oidc" publish.log; then
+            echo "::error::pnpm logged 'Skipped OIDC' — its own trusted-publishing exchange failed and it fell back to a static credential (or none at all). Investigate before trusting this release."
+            exit 1
+          fi
+
+      - name: Push release tag and create GitHub Release
+        if: steps.detect.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.detect.outputs.tag }}"
+          version="${{ steps.detect.outputs.version }}"
+          git push origin "$tag"
+          notes=$(awk "/^## ${version}\$/{flag=1;next}/^## /{flag=0}flag" CHANGELOG.md)
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes "${notes:-See CHANGELOG.md for details.}"
+
+      # The main guard. The registry's own record of the published version is the only
+      # thing that proves what actually happened, independent of our own log parsing or
+      # git tags:
+      #
+      # - `npm view <name>@<version> version` confirms the version we expect is really
+      #   live on the registry (a git tag can exist locally without the publish having
+      #   actually reached npm — e.g. `changeset publish` crashing right after tagging).
+      # - `npm view <name>@<version> dist.attestations --json` is the actual proof of
+      #   trusted publishing: the npm registry only attaches this field to a version when
+      #   that publish went through a real OIDC exchange and carried a provenance
+      #   attestation (confirmed against a live published package on the registry, and
+      #   documented at docs.npmjs.com/generating-provenance-statements and
+      #   docs.npmjs.com/trusted-publishers). It is absent/empty for a version published
+      #   with a plain token — including this package's own first release, published by
+      #   hand per RELEASE_BOOTSTRAP.md without `--provenance` (deliberately: a local
+      #   machine has no OIDC identity to attest to). That first release never runs
+      #   through this workflow at all, so it never hits this check.
+      - name: Verify published version and OIDC provenance
+        if: steps.detect.outputs.published == 'true'
+        run: |
+          set -euo pipefail
+          name="${{ steps.detect.outputs.name }}"
+          version="${{ steps.detect.outputs.version }}"
+
+          published=$(npm view "${name}" version)
+          if [ "$published" != "$version" ]; then
+            echo "::error::npm has ${name}@${published} but this run expected ${name}@${version} — a release tag exists locally but the registry doesn't have the version we expect. Investigate before trusting this release."
+            exit 1
+          fi
+
+          attestations=$(npm view "${name}@${version}" dist.attestations --json 2>/dev/null || true)
+          if [ -z "$attestations" ] || [ "$attestations" = "null" ]; then
+            echo "::error::${name}@${version} has no dist.attestations on the registry — this publish did not go through npm's OIDC trusted-publishing exchange with provenance. Investigate before trusting this release."
+            exit 1
+          fi
+
+          echo "Confirmed: ${name}@${version} is live on npm with provenance attestations."
