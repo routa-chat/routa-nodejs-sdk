@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in the SDK isn't working as documented.
+labels:
+  - bug
+body:
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      description: The installed `@routa-chat/sdk` version (see your `package.json` or `package-lock.json`/`pnpm-lock.yaml`).
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: Output of `node -v`.
+      placeholder: "v22.11.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead. Include the full error message and stack trace, if any.
+    validations:
+      required: true
+
+  - type: input
+    id: request-id
+    attributes:
+      label: Request ID
+      description: |
+        If the bug involves an error thrown by an API call, every `RoutaApiError` carries a
+        `requestId` — please include it, it lets us find the exact request server-side.
+      placeholder: "req_..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code snippet that reproduces the issue.
+      render: typescript
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else worth knowing — OS, bundler, runtime other than Node (Bun, Deno), etc.
+    validations:
+      required: false
