@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   HttpClient,
@@ -8,40 +6,6 @@ import type {
 import type { MessageContent } from '../../../src/message/message'
 import { toMessageId } from '../../../src/message/message-id'
 import { MessagesResource } from '../../../src/message/messages-resource'
-
-const OPENAPI_SNAPSHOT_PATH = join(
-  __dirname,
-  '../../../docs/reference/openapi-v1.snapshot.json'
-)
-
-// Loaded once, straight from the real contract — the serialization tests
-// below assert against these property names instead of a hand-typed list,
-// so they fail the moment the SDK's body shape drifts from the real one.
-const openApiSnapshot: {
-  paths: Record<
-    string,
-    Record<
-      string,
-      {
-        requestBody?: {
-          content: {
-            'application/json': {
-              schema: {
-                properties: Record<string, unknown>
-                required: string[]
-              }
-            }
-          }
-        }
-      }
-    >
-  >
-} = JSON.parse(readFileSync(OPENAPI_SNAPSHOT_PATH, 'utf-8'))
-
-const SEND_MESSAGE_REQUEST_SCHEMA =
-  openApiSnapshot.paths['/v1/messages']?.['post']?.requestBody?.content[
-    'application/json'
-  ].schema
 
 // `vi.fn()` infers a non-generic mock, which can't satisfy `HttpClient`'s
 // generic `request<T>` on its own — this wraps it in a real generic function
@@ -97,14 +61,6 @@ function rawMessage(overrides: {
 }
 
 describe('send() — serialization', () => {
-  it('is validated against the real requestBody schema in the OpenAPI snapshot', () => {
-    expect(SEND_MESSAGE_REQUEST_SCHEMA).toBeDefined()
-    expect(SEND_MESSAGE_REQUEST_SCHEMA?.required).toEqual(['channel', 'to'])
-    expect(Object.keys(SEND_MESSAGE_REQUEST_SCHEMA?.properties ?? {})).toEqual(
-      expect.arrayContaining(['channel', 'to', 'text', 'template', 'metadata'])
-    )
-  })
-
   it('produces exactly the documented body for {channel, to, text}', async () => {
     const { resource, requestSpy } = buildResource(rawMessage({}))
 

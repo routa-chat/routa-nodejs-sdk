@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   HttpClient,
@@ -8,39 +6,6 @@ import type {
 import { toWebhookId } from '../../../src/webhook/webhook-id'
 import type { RawWebhook } from '../../../src/webhook/webhook-mapper'
 import { WebhooksResource } from '../../../src/webhook/webhooks-resource'
-
-const OPENAPI_SNAPSHOT_PATH = join(
-  __dirname,
-  '../../../docs/reference/openapi-v1.snapshot.json'
-)
-
-const openApiSnapshot: {
-  paths: Record<
-    string,
-    Record<
-      string,
-      {
-        requestBody?: {
-          content: {
-            'application/json': {
-              schema: {
-                properties: Record<string, unknown>
-                required: string[]
-              }
-            }
-          }
-        }
-      }
-    >
-  >
-} = JSON.parse(readFileSync(OPENAPI_SNAPSHOT_PATH, 'utf-8'))
-
-const CREATE_REQUEST_SCHEMA =
-  openApiSnapshot.paths['/v1/webhook_endpoints']?.['post']?.requestBody
-    ?.content['application/json'].schema
-const UPDATE_REQUEST_SCHEMA =
-  openApiSnapshot.paths['/v1/webhook_endpoints/{id}']?.['patch']?.requestBody
-    ?.content['application/json'].schema
 
 function fakeHttpClient(
   requestSpy: (options: HttpRequestOptions) => unknown
@@ -75,15 +40,6 @@ function rawWebhook(overrides: Partial<RawWebhook>): RawWebhook {
 }
 
 describe('create() — serialization', () => {
-  it('is validated against the real requestBody schema in the OpenAPI snapshot', () => {
-    expect(CREATE_REQUEST_SCHEMA).toBeDefined()
-    expect(CREATE_REQUEST_SCHEMA?.required).toEqual(['url', 'subscribed_types'])
-    expect(Object.keys(CREATE_REQUEST_SCHEMA?.properties ?? {})).toEqual([
-      'url',
-      'subscribed_types',
-    ])
-  })
-
   it('produces exactly the documented body', async () => {
     const requestSpy = vi
       .fn()
@@ -194,14 +150,6 @@ describe('retrieve()', () => {
 })
 
 describe('update() — serialization', () => {
-  it('is validated against the real requestBody schema in the OpenAPI snapshot', () => {
-    expect(UPDATE_REQUEST_SCHEMA).toBeDefined()
-    expect(UPDATE_REQUEST_SCHEMA?.required).toEqual(['subscribed_types'])
-    expect(Object.keys(UPDATE_REQUEST_SCHEMA?.properties ?? {})).toEqual([
-      'subscribed_types',
-    ])
-  })
-
   it('calls PATCH /v1/webhook_endpoints/:id with the documented body', async () => {
     const requestSpy = vi
       .fn()

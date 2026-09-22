@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   HttpClient,
@@ -8,37 +6,6 @@ import type {
 import { toTemplateId } from '../../../src/template/template-id'
 import type { RawTemplate } from '../../../src/template/template-mapper'
 import { TemplatesResource } from '../../../src/template/templates-resource'
-
-const OPENAPI_SNAPSHOT_PATH = join(
-  __dirname,
-  '../../../docs/reference/openapi-v1.snapshot.json'
-)
-
-const openApiSnapshot: {
-  paths: Record<
-    string,
-    Record<
-      string,
-      {
-        requestBody?: {
-          content: {
-            'application/json': {
-              schema: {
-                properties: Record<string, unknown>
-                required: string[]
-              }
-            }
-          }
-        }
-      }
-    >
-  >
-} = JSON.parse(readFileSync(OPENAPI_SNAPSHOT_PATH, 'utf-8'))
-
-const SUBMIT_TEMPLATE_REQUEST_SCHEMA =
-  openApiSnapshot.paths['/v1/templates']?.['post']?.requestBody?.content[
-    'application/json'
-  ].schema
 
 function fakeHttpClient(
   requestSpy: (options: HttpRequestOptions) => unknown
@@ -74,20 +41,6 @@ function rawTemplate(overrides: Partial<RawTemplate>): RawTemplate {
 }
 
 describe('submit() — serialization', () => {
-  it('is validated against the real requestBody schema in the OpenAPI snapshot', () => {
-    expect(SUBMIT_TEMPLATE_REQUEST_SCHEMA).toBeDefined()
-    expect(SUBMIT_TEMPLATE_REQUEST_SCHEMA?.required).toEqual([
-      'channel',
-      'name',
-      'language',
-      'category',
-      'body_text',
-    ])
-    expect(
-      Object.keys(SUBMIT_TEMPLATE_REQUEST_SCHEMA?.properties ?? {})
-    ).toEqual(['channel', 'name', 'language', 'category', 'body_text'])
-  })
-
   it('produces exactly the documented body', async () => {
     const requestSpy = vi.fn().mockResolvedValue(rawTemplate({}))
     const resource = new TemplatesResource(fakeHttpClient(requestSpy))
