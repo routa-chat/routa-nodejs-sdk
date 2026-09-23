@@ -36,7 +36,7 @@ const routa = new Routa({ apiKey: 'rt_live_...' })
 
 const message = await routa.messages.send({
   channel: 'chan_...', // a channel you connected in the Routa dashboard
-  to: '+5581999999999', // recipient, E.164
+  to: '+5581999999999', // recipient, E.164 (leading + is optional — '5581999999999' also works)
   text: 'Olá! Seu pedido foi confirmado.',
 })
 

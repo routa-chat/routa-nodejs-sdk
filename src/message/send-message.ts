@@ -14,6 +14,7 @@ export interface SendMessageTemplateParams {
  */
 export type SendMessageParams = {
   readonly channel: string
+  /** Recipient address in E.164 format, e.g. `+5581999999999`. The leading `+` is optional — `5581999999999` is accepted too. */
   readonly to: string
   readonly metadata?: Record<string, string>
   /** Reused across every retry of this call instead of letting the SDK generate one. */
