@@ -111,9 +111,12 @@ function lookUp(id: string) {
 
 ```ts
 for await (const message of routa.messages.list({ direction: 'inbound', limit: 50 })) {
-  console.log(message.id, message.from, message.content)
+  const text = message.content?.type === 'text' ? message.content.body : null
+  console.log(message.id, message.from, text)
 }
 ```
+
+`message.content` is `null` once Routa removes it under your plan's [retention period](#message-content-retention); `message.contentRedactedAt` then holds the moment it was removed.
 
 To control paging yourself, ask for one page at a time:
 
@@ -121,6 +124,22 @@ To control paging yourself, ask for one page at a time:
 const page = await routa.messages.list({ limit: 20 }).page()
 console.log(page.data.length, page.hasMore, page.nextCursor)
 ```
+
+### Message content retention
+
+Routa keeps message content for the number of days your plan includes, then removes it. The rest of the message stays: id, status, timestamps, addresses and `metadata`. A message whose content was removed has `content: null` and a `contentRedactedAt` timestamp, and it is returned by `retrieve()` and `list()` like any other, so guard `content` before reading it:
+
+```ts
+const message = await routa.messages.retrieve(toMessageId('msg_01J8XXXXXXXXXXXXXXXXXXXXXX'))
+
+if (message.content) {
+  console.log(message.content.type)
+} else {
+  console.log(`Content removed at ${message.contentRedactedAt}`)
+}
+```
+
+Removal cannot be undone, and events (`message.*`) are not affected: they carry the message as it was when the event happened.
 
 ### Webhooks
 
