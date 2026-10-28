@@ -66,7 +66,12 @@ export interface Message {
   readonly direction: 'outbound' | 'inbound'
   readonly from: string
   readonly to: string
-  readonly content: MessageContent
+  /**
+   * `null` once the content was removed by the retention period of the
+   * project's plan; the rest of the message (ids, status, timestamps,
+   * addresses, `metadata`) is kept. `contentRedactedAt` says when.
+   */
+  readonly content: MessageContent | null
   readonly status: MessageStatus
   readonly metadata: Record<string, string>
   /** ISO 8601 — always present, set the moment Routa accepts the message. */
@@ -75,6 +80,11 @@ export interface Message {
   readonly deliveredAt: string | null
   readonly readAt: string | null
   readonly failedAt: string | null
+  /**
+   * ISO 8601 moment the content was removed by plan retention. `null` while
+   * the message still has its content.
+   */
+  readonly contentRedactedAt: string | null
   /**
    * `true` when this call reused an `Idempotency-Key` from an earlier
    * attempt and got back that attempt's original result instead of creating

@@ -98,3 +98,25 @@ test('list() returns an AsyncIterable<Message> with a page() escape hatch', () =
 test('Message.id is branded as MessageId, not a raw string', () => {
   expectTypeOf<Message['id']>().not.toEqualTypeOf<string>()
 })
+
+test('Message.content is nullable and narrows to MessageContent after a guard', () => {
+  expectTypeOf<Message['content']>().toEqualTypeOf<MessageContent | null>()
+
+  function body(message: Message): string | undefined {
+    // @ts-expect-error — content may be null, so `.type` needs a guard first.
+    void message.content.type
+
+    if (message.content?.type === 'text') {
+      expectTypeOf(message.content).toEqualTypeOf<
+        Extract<MessageContent, { type: 'text' }>
+      >()
+      return message.content.body
+    }
+    return undefined
+  }
+  void body
+})
+
+test('Message.contentRedactedAt is string | null', () => {
+  expectTypeOf<Message['contentRedactedAt']>().toEqualTypeOf<string | null>()
+})

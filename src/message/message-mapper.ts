@@ -12,7 +12,7 @@ export interface RawMessage {
   readonly direction: 'outbound' | 'inbound'
   readonly from: string
   readonly to: string
-  readonly content: MessageContent
+  readonly content: MessageContent | null
   readonly status: MessageStatus
   readonly metadata: Record<string, string>
   readonly accepted_at: string
@@ -20,6 +20,8 @@ export interface RawMessage {
   readonly delivered_at: string | null
   readonly read_at: string | null
   readonly failed_at: string | null
+  /** Absent from responses of an API version that predates plan retention. */
+  readonly content_redacted_at?: string | null | undefined
 }
 
 /**
@@ -35,7 +37,7 @@ export function parseMessage(raw: RawMessage, replayed = false): Message {
     direction: raw.direction,
     from: raw.from,
     to: raw.to,
-    content: parseMessageContent(raw.content),
+    content: raw.content === null ? null : parseMessageContent(raw.content),
     status: raw.status,
     metadata: raw.metadata,
     acceptedAt: raw.accepted_at,
@@ -43,6 +45,7 @@ export function parseMessage(raw: RawMessage, replayed = false): Message {
     deliveredAt: raw.delivered_at,
     readAt: raw.read_at,
     failedAt: raw.failed_at,
+    contentRedactedAt: raw.content_redacted_at ?? null,
     _replayed: replayed,
   }
 }
