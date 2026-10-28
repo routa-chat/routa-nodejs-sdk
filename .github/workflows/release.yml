@@ -77,7 +77,8 @@ jobs:
           pnpm run release 2>&1 | tee publish.log
 
       # `changeset publish` (above) tags a newly published version locally as
-      # `<name>@<version>` but never pushes it. A tag that exists locally but not on the
+      # `v<version>` (a single-package repo gets `v<version>`, not `<name>@<version>` —
+      # that form is only for monorepos) but never pushes it. A tag that exists locally but not on the
       # remote is exactly what "this run just published something new" looks like, and is
       # the only reliable way to tell a real publish apart from `changeset publish`'s
       # no-op (nothing was pending) — both leave `pnpm run release` exiting 0 with nothing
@@ -89,7 +90,7 @@ jobs:
           set -euo pipefail
           name=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
-          tag="${name}@${version}"
+          tag="v${version}"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
