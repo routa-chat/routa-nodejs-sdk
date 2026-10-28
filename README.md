@@ -284,6 +284,19 @@ Be aware of these gaps before you build on the SDK:
 
 Issues and pull requests are welcome on [GitHub](https://github.com/routa-chat/routa-nodejs-sdk/issues).
 
+### Running the conformance suite
+
+`pnpm test` also runs `tests/conformance`, which sends real requests to a Routa API instance (`ROUTA_TEST_BASE_URL`, default `http://localhost:3000`). Without a reachable instance those tests are skipped, not failed.
+
+Each run signs up a few organizations on that instance, and the API limits sign-ups per IP to 5 an hour by default, so a second run within the hour fails with a message saying so. To run the suite repeatedly, start the API with a higher limit:
+
+```bash
+# in apps/api of the Routa repository
+AUTH_RATE_LIMIT_SIGNUP_IP_LIMIT=1000 bun run dev
+```
+
+The API keeps that counter in Redis, so restarting it alone does not clear a limit that was already hit; raise the limit or wait for the window (`AUTH_RATE_LIMIT_SIGNUP_IP_WINDOW_SECONDS`, one hour by default) to pass.
+
 ## License
 
 [MIT](https://github.com/routa-chat/routa-nodejs-sdk/blob/master/LICENSE)

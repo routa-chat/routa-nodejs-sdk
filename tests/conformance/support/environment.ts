@@ -17,6 +17,18 @@
  * `ROUTA_TEST_CHANNEL_ID`/`ROUTA_TEST_TO`, because connecting a real channel
  * requires a provider OAuth round trip no automated suite can perform.
  *
+ * The reference API limits sign-ups per IP (5 an hour by default), and every
+ * conformance file signs up from the same address. A full run signs up 3
+ * organizations (4 with the webhook signer configured), so it fits under the
+ * default once an hour. To run the suite repeatedly, start the reference API
+ * with a higher limit:
+ *
+ *   AUTH_RATE_LIMIT_SIGNUP_IP_LIMIT=1000
+ *   AUTH_RATE_LIMIT_SIGNUP_IP_WINDOW_SECONDS=3600   (optional)
+ *
+ * The counter is kept in the API's Redis, so a restart alone does not reset
+ * it. When the limit is hit, sign-up fails with an error that says so.
+ *
  * Every test gated by this module skips — rather than fails — when the
  * API instance isn't reachable or a required fixture is missing, so a
  * missing local instance shows up as a skipped test, never a false pass or
