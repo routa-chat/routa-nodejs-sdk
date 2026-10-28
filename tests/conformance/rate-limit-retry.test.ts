@@ -29,6 +29,7 @@ import {
  */
 describe.skipIf(!apiReachable)('rate-limit retry — real API server', () => {
   it('a real 429 carries Retry-After and RateLimit-* headers, and messages.send() recovers by honouring it', async () => {
+    // A project of its own, never shared: this test exhausts its send burst.
     const { apiKey } = await provisionApiKey(BASE_URL, ['messages:write'])
     const routa = new Routa({ apiKey: apiKey.secret, baseURL: BASE_URL })
 
@@ -43,7 +44,11 @@ describe.skipIf(!apiReachable)('rate-limit retry — real API server', () => {
     let observed429 = false
     for (let attempt = 0; attempt < 200 && !observed429; attempt++) {
       const error = await probe.messages
-        .send({ channel: 'chan_doesnotexist', to: '+15550002222', text: 'hi' })
+        .send({
+          channel: 'chan_doesnotexist',
+          to: '+5581999999999',
+          text: 'hi',
+        })
         .then(() => undefined)
         .catch((e: unknown) => e)
       if (error instanceof RoutaRateLimitError) {
@@ -62,7 +67,7 @@ describe.skipIf(!apiReachable)('rate-limit retry — real API server', () => {
     // conformant outcome is still being rate-limited after every retry;
     // anything else is a real conformance failure.
     const error = await routa.messages
-      .send({ channel: 'chan_doesnotexist', to: '+15550002222', text: 'hi' })
+      .send({ channel: 'chan_doesnotexist', to: '+5581999999999', text: 'hi' })
       .then(() => undefined)
       .catch((e: unknown) => e)
     if (error !== undefined) {

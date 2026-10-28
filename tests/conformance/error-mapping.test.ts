@@ -11,15 +11,24 @@ import {
   hasChannelFixture,
   requireChannelFixture,
 } from './support/environment'
-import { provisionApiKey } from './support/provisioning'
+import { provisionApiKey, provisionSharedApiKey } from './support/provisioning'
+
+/**
+ * A well-formed recipient the API accepts as a real number. The API checks the
+ * recipient before the content and the channel, so a number it rejects (such as
+ * the 555 range) would hide the error each scenario below is after.
+ */
+const VALID_RECIPIENT = '+5581999999999'
 
 /**
  * Every `error.type`/`code` → SDK error class mapping in the SDK's
  * reliability documentation, produced by a real call against a real API
- * instance — never a canned HTTP response standing in for the server. Each
- * scenario provisions its own fresh organization/project/API key over real
- * HTTP, so none of these need a pre-connected channel: the ones below all
- * fail (or succeed) before or without ever needing a real channel to exist.
+ * instance — never a canned HTTP response standing in for the server. The
+ * file signs up one organization/project over real HTTP and each scenario
+ * issues its own API key on it, so none of these need a pre-connected
+ * channel: the ones below all fail (or succeed) before or without ever
+ * needing a real channel to exist. The one scenario that exhausts the send
+ * burst provisions a project of its own, so it cannot starve the others.
  */
 describe.skipIf(!apiReachable)('error mapping — real API server', () => {
   it('401 api_key_invalid — an unrecognized bearer token', async () => {
@@ -30,7 +39,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     })
 
     const error = await routa.messages
-      .send({ channel: 'chan_doesnotexist', to: '+15550002222', text: 'hi' })
+      .send({ channel: 'chan_doesnotexist', to: VALID_RECIPIENT, text: 'hi' })
       .catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(RoutaAuthenticationError)
@@ -41,7 +50,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
   })
 
   it('403 insufficient_scope — a key issued without messages:write', async () => {
-    const { apiKey } = await provisionApiKey(BASE_URL, ['messages:read'])
+    const { apiKey } = await provisionSharedApiKey(BASE_URL, ['messages:read'])
     const routa = new Routa({
       apiKey: apiKey.secret,
       baseURL: BASE_URL,
@@ -49,7 +58,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     })
 
     const error = await routa.messages
-      .send({ channel: 'chan_doesnotexist', to: '+15550002222', text: 'hi' })
+      .send({ channel: 'chan_doesnotexist', to: VALID_RECIPIENT, text: 'hi' })
       .catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(RoutaInvalidRequestError)
@@ -59,7 +68,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
   })
 
   it('404 message_not_found — retrieving a message id that does not exist', async () => {
-    const { apiKey } = await provisionApiKey(BASE_URL, ['messages:read'])
+    const { apiKey } = await provisionSharedApiKey(BASE_URL, ['messages:read'])
     const routa = new Routa({
       apiKey: apiKey.secret,
       baseURL: BASE_URL,
@@ -76,7 +85,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
   })
 
   it('404 channel_not_found — sending through a channel id that does not exist', async () => {
-    const { apiKey } = await provisionApiKey(BASE_URL, ['messages:write'])
+    const { apiKey } = await provisionSharedApiKey(BASE_URL, ['messages:write'])
     const routa = new Routa({
       apiKey: apiKey.secret,
       baseURL: BASE_URL,
@@ -86,7 +95,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     const error = await routa.messages
       .send({
         channel: 'chan_doesnotexist00000000000000',
-        to: '+15550002222',
+        to: VALID_RECIPIENT,
         text: 'hi',
       })
       .catch((e: unknown) => e)
@@ -96,18 +105,21 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     expect((error as RoutaInvalidRequestError).statusCode).toBe(404)
   })
 
-  it('422 invalid_recipient — a `to` that is not a parseable E.164 number', async () => {
-    const { apiKey } = await provisionApiKey(BASE_URL, ['messages:write'])
+  it('422 invalid_recipient — a well-formed `to` that is not a real number', async () => {
+    const { apiKey } = await provisionSharedApiKey(BASE_URL, ['messages:write'])
     const routa = new Routa({
       apiKey: apiKey.secret,
       baseURL: BASE_URL,
       maxRetries: 0,
     })
 
+    // Matches the route's format pattern but is not a valid number for its
+    // country: the check the API makes server-side and answers with
+    // `invalid_recipient` (the 555 range is never assigned).
     const error = await routa.messages
       .send({
         channel: 'chan_doesnotexist',
-        to: 'not-a-phone-number',
+        to: '+15550002222',
         text: 'hi',
       })
       .catch((e: unknown) => e)
@@ -117,8 +129,32 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     expect((error as RoutaInvalidRequestError).statusCode).toBe(422)
   })
 
+  it('422 for a `to` that fails the route format check — still a RoutaInvalidRequestError', async () => {
+    const { apiKey } = await provisionSharedApiKey(BASE_URL, ['messages:write'])
+    const routa = new Routa({
+      apiKey: apiKey.secret,
+      baseURL: BASE_URL,
+      maxRetries: 0,
+    })
+
+    // The route's schema rejects this before the use case runs, and the API
+    // answers with the framework's validation body rather than the
+    // `{ error: { code } }` envelope — so no API `code` to assert here, only
+    // that the SDK still raises the right class and status.
+    const error = await routa.messages
+      .send({
+        channel: 'chan_doesnotexist',
+        to: 'not-a-phone-number',
+        text: 'hi',
+      })
+      .catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(RoutaInvalidRequestError)
+    expect((error as RoutaInvalidRequestError).statusCode).toBe(422)
+  })
+
   it('422 content_rejected — text that fails server-side content validation', async () => {
-    const { apiKey } = await provisionApiKey(BASE_URL, ['messages:write'])
+    const { apiKey } = await provisionSharedApiKey(BASE_URL, ['messages:write'])
     const routa = new Routa({
       apiKey: apiKey.secret,
       baseURL: BASE_URL,
@@ -126,7 +162,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     })
 
     const error = await routa.messages
-      .send({ channel: 'chan_doesnotexist', to: '+15550002222', text: '' })
+      .send({ channel: 'chan_doesnotexist', to: VALID_RECIPIENT, text: '' })
       .catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(RoutaInvalidRequestError)
@@ -159,7 +195,7 @@ describe.skipIf(!apiReachable)('error mapping — real API server', () => {
     let rateLimitError: unknown
     for (let attempt = 0; attempt < 200 && !rateLimitError; attempt++) {
       const error = await routa.messages
-        .send({ channel: 'chan_doesnotexist', to: '+15550002222', text: 'hi' })
+        .send({ channel: 'chan_doesnotexist', to: VALID_RECIPIENT, text: 'hi' })
         .then(() => undefined)
         .catch((e: unknown) => e)
       if (error instanceof RoutaRateLimitError) {
