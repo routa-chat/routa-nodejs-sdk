@@ -153,13 +153,20 @@ jobs:
           name="${{ steps.detect.outputs.name }}"
           version="${{ steps.detect.outputs.version }}"
 
-          published=$(npm view "${name}" version)
+          # The registry can take a minute or two to show a version `changeset publish` just
+          # reported as published (seen on the 0.2.0 release), so poll before judging it.
+          published=""
+          for _ in $(seq 1 18); do
+            published=$(npm view "${name}@${version}" version --prefer-online 2>/dev/null || true)
+            [ "$published" = "$version" ] && break
+            sleep 10
+          done
           if [ "$published" != "$version" ]; then
-            echo "::error::npm has ${name}@${published} but this run expected ${name}@${version} — a release tag exists locally but the registry doesn't have the version we expect. Investigate before trusting this release."
+            echo "::error::${name}@${version} is not on the npm registry after 3 minutes — a release tag exists locally but the registry doesn't have the version we expect. Investigate before trusting this release."
             exit 1
           fi
 
-          attestations=$(npm view "${name}@${version}" dist.attestations --json 2>/dev/null || true)
+          attestations=$(npm view "${name}@${version}" dist.attestations --json --prefer-online 2>/dev/null || true)
           if [ -z "$attestations" ] || [ "$attestations" = "null" ]; then
             echo "::error::${name}@${version} has no dist.attestations on the registry — this publish did not go through npm's OIDC trusted-publishing exchange with provenance. Investigate before trusting this release."
             exit 1
