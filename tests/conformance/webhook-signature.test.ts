@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Routa } from '../../src/client'
 import { RoutaSignatureVerificationError } from '../../src/domain/errors/routa-signature-verification-error'
 import { apiReachable, BASE_URL } from './support/environment'
-import { provisionApiKey } from './support/provisioning'
+import { provisionSharedApiKey } from './support/provisioning'
 import { loadRealWebhookSigner } from './support/real-webhook-signer'
 
 /**
@@ -52,7 +52,7 @@ describe('webhook signature — real API server', async () => {
     'accepts a payload signed by the reference signer with a real endpoint secret',
     async () => {
       if (!signer) throw new Error('unreachable — canRun guarantees this')
-      const { project, apiKey } = await provisionApiKey(BASE_URL, [
+      const { project, apiKey } = await provisionSharedApiKey(BASE_URL, [
         'webhooks:write',
       ])
       const routa = new Routa({ apiKey: apiKey.secret, baseURL: BASE_URL })
@@ -89,7 +89,7 @@ describe('webhook signature — real API server', async () => {
     'rejects a payload signed with a secret that does not belong to the endpoint',
     async () => {
       if (!signer) throw new Error('unreachable — canRun guarantees this')
-      const { project, apiKey } = await provisionApiKey(BASE_URL, [
+      const { project, apiKey } = await provisionSharedApiKey(BASE_URL, [
         'webhooks:write',
       ])
       const routa = new Routa({ apiKey: apiKey.secret, baseURL: BASE_URL })
@@ -118,7 +118,7 @@ describe('webhook signature — real API server', async () => {
     'secret rotation: a payload signed with the outgoing secret still verifies during the overlap window',
     async () => {
       if (!signer) throw new Error('unreachable — canRun guarantees this')
-      const { project, apiKey } = await provisionApiKey(BASE_URL, [
+      const { project, apiKey } = await provisionSharedApiKey(BASE_URL, [
         'webhooks:write',
       ])
       const routa = new Routa({ apiKey: apiKey.secret, baseURL: BASE_URL })
