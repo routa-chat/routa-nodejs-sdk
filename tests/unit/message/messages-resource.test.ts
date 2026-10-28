@@ -38,7 +38,8 @@ const MESSAGE_ID = 'msg_01J8XA1B2C3D4E5F6G7H8J9K0M'
 
 function rawMessage(overrides: {
   id?: string
-  content?: MessageContent
+  content?: MessageContent | null
+  content_redacted_at?: string | null
   status?: string
   sent_at?: string | null
   read_at?: string | null
@@ -49,7 +50,12 @@ function rawMessage(overrides: {
     direction: 'outbound',
     from: '+15550001111',
     to: '+15550002222',
-    content: overrides.content ?? { type: 'text', body: 'Hello from Routa' },
+    // `null` is a real value (content removed by retention), so `??` would
+    // wrongly replace it with the default.
+    content:
+      overrides.content === undefined
+        ? { type: 'text', body: 'Hello from Routa' }
+        : overrides.content,
     status: overrides.status ?? 'accepted',
     metadata: {},
     accepted_at: '2026-09-12T12:00:00.000Z',
@@ -57,6 +63,11 @@ function rawMessage(overrides: {
     delivered_at: null,
     read_at: overrides.read_at ?? null,
     failed_at: null,
+    // Left out entirely when not overridden, like a response from an API
+    // that predates the field.
+    ...('content_redacted_at' in overrides
+      ? { content_redacted_at: overrides.content_redacted_at }
+      : {}),
   }
 }
 
@@ -197,6 +208,7 @@ describe('send() — deserialization', () => {
       deliveredAt: null,
       readAt: null,
       failedAt: null,
+      contentRedactedAt: null,
       _replayed: false,
     })
   })
@@ -248,6 +260,59 @@ describe('content parsing', () => {
     const message = await resource.retrieve(toMessageId(MESSAGE_ID))
 
     expect(message.content).toEqual(content)
+  })
+})
+
+const REDACTED_AT = '2026-10-23T03:00:00.000Z'
+
+describe('messages whose content was removed by plan retention', () => {
+  it('retrieve() does not throw and returns content: null with contentRedactedAt', async () => {
+    const { resource } = buildResource(
+      rawMessage({ content: null, content_redacted_at: REDACTED_AT })
+    )
+
+    const message = await resource.retrieve(toMessageId(MESSAGE_ID))
+
+    expect(message.content).toBeNull()
+    expect(message.contentRedactedAt).toBe(REDACTED_AT)
+  })
+
+  it('list() returns a page mixing normal and redacted messages without throwing', async () => {
+    const { resource } = buildResource({
+      data: [
+        rawMessage({ id: 'msg_new', content_redacted_at: null }),
+        rawMessage({
+          id: 'msg_old',
+          content: null,
+          content_redacted_at: REDACTED_AT,
+        }),
+      ],
+      has_more: false,
+      next_cursor: null,
+    })
+
+    const collected = []
+    for await (const message of resource.list()) {
+      collected.push(message)
+    }
+
+    expect(collected.map(m => m.id)).toEqual(['msg_new', 'msg_old'])
+    expect(collected[0]?.content).toEqual({
+      type: 'text',
+      body: 'Hello from Routa',
+    })
+    expect(collected[0]?.contentRedactedAt).toBeNull()
+    expect(collected[1]?.content).toBeNull()
+    expect(collected[1]?.contentRedactedAt).toBe(REDACTED_AT)
+  })
+
+  it('works against a response without content_redacted_at (older API)', async () => {
+    const { resource } = buildResource(rawMessage({}))
+
+    const message = await resource.retrieve(toMessageId(MESSAGE_ID))
+
+    expect(message.content).toEqual({ type: 'text', body: 'Hello from Routa' })
+    expect(message.contentRedactedAt).toBeNull()
   })
 })
 
