@@ -492,6 +492,8 @@ Open the link with `window.open` from your page, or in a new tab: the page that 
 
 To see your customers' numbers without one call per project, `partner.channels.list()` pages the channels of every project you made. It filters by `status` (`pending`, `active`, `degraded`, `disabled`), `projectId` and `externalRef`, and `partner.projects.list({ hasChannel: false })` finds the projects that never finished the link.
 
+To hear about every customer in one place, register the organization's one webhook with `partner.webhook.set()` (it needs the opt-in `webhooks:write` scope) and keep the secret it returns once. Verify each delivery with `partner.webhook.constructEvent(rawBody, header, secret)`: it is the same check as `routa.webhooks.constructEvent()`, with no network call and no `Routa` needed, and the event's `projectId` and `externalRef` say which customer it is about.
+
 **This cycle is not run by this repository's tests.** The partner key, the signing secret and the partner id come from the dashboard, and the test suite cannot provision them, so the conformance suite covers the API calls (the project, its key, the channel listing, the deletion) but not the signed link opened by a customer, and the README block above is type-checked, not run.
 
 ### Rough edges worth knowing
