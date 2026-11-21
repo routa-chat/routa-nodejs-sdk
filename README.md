@@ -397,6 +397,121 @@ const routa = new Routa({
 
 **Idempotency.** `messages.send()` sends an `Idempotency-Key` automatically and reuses it on every retry, so a retried send cannot create a second message. Pass your own with `send({ ..., idempotencyKey })`. When a call returns the result of an earlier attempt, `message._replayed` is `true`. The server deduplicates only `messages.send()`; set `maxRetries: 0` if you need to avoid retries on other write calls.
 
+## Partner API (experimental)
+
+> **Experimental.** `@routa-chat/sdk/partner` may change in a minor release until an external partner has used it. The Partner API also exists only for plans that include it: that is granted by Routa, not something you can switch on, and without it every call answers `404 partner_api_not_available`.
+
+If you run a platform that resells WhatsApp to its own customers, the Partner API provisions one project per customer, tied to your own id for them (`externalRef`). It lives in its own entry point on purpose: a partner key reaches **every** customer of yours (see [Security](#partner-api-security)), so importing it should be a visible, greppable act, and `Routa` loads none of it.
+
+```ts
+import { RoutaPartner } from '@routa-chat/sdk/partner'
+
+const partner = new RoutaPartner('rt_partner_...')
+```
+
+`new RoutaPartner('rt_partner_...')` is shorthand for `new RoutaPartner({ partnerKey: 'rt_partner_...' })`, and the other options (`baseURL`, `timeout`, `maxRetries`, `logger`, `fetch`) are the same as `Routa`'s. The credential is `partnerKey`, never `apiKey`: a project API key is refused at construction, with a message that points you to `Routa`, and `Routa` refuses a partner key the same way.
+
+A partner key **never sends a message**. After onboarding, a customer's traffic uses that project's own API key, with `Routa`.
+
+**What a person does once, in the dashboard (Settings → Partner).** Your plan must include the Partner API; then create the partner profile (you get your `ptn_…` partner id and the **signing secret**, shown once), register the **redirect origins** your links may send customers back to, and issue a **partner key** (`rt_partner_…`, shown once). The API cannot do any of this for you, by design: a leaked key must not be able to replace itself.
+
+### From a customer to a connected number
+
+The cycle: create the customer's project, issue its API key, sign the link the customer opens to connect their number, confirm through the API, then send with that key.
+
+```ts
+import { Routa } from '@routa-chat/sdk'
+import {
+  buildOnboardingLink,
+  RoutaPartner,
+} from '@routa-chat/sdk/partner'
+
+function required(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`${name} is not set`)
+  }
+  return value
+}
+
+const partner = new RoutaPartner(required('ROUTA_PARTNER_KEY'))
+
+// 1 and 2: the customer's project and its API key. Run them on your server,
+// once per customer, when they sign up.
+async function provision(customerId: string, customerName: string) {
+  // `customerId` is YOUR id for the customer: it is the project's `externalRef`.
+  // Repeating the call returns the same project (`created` is false).
+  const { project } = await partner.projects.create({
+    name: customerName,
+    externalRef: customerId,
+  })
+
+  // Needs the `api_keys:write` scope. The secret comes back ONCE: store it
+  // now, in your secret store. Not safe to retry (see below).
+  const key = await partner.projects.apiKeys.create(project.id, {
+    name: customerName,
+    scopes: ['messages:write', 'messages:read'], // the narrowest set that works
+  })
+
+  return { projectId: project.id, projectApiKey: key.secret }
+}
+
+// 3: sign the link WHEN THE CUSTOMER CLICKS (it is good for ten minutes), on
+// your server. The signing secret never leaves it.
+async function connectLink(customerId: string): Promise<string> {
+  return buildOnboardingLink({
+    partnerId: required('ROUTA_PARTNER_ID'), // ptn_…
+    signingSecret: required('ROUTA_PARTNER_SIGNING_SECRET'),
+    externalRef: customerId,
+    redirectUrl: 'https://app.example.com/connected', // an origin you registered
+    state: 'a-value-you-check-against-the-customers-session',
+  })
+}
+
+// 4: confirm through the API. The redirect back to your `redirectUrl` is a
+// hint, never proof: anyone can forge that request. Read the project instead.
+async function isConnected(customerId: string): Promise<boolean> {
+  const found = await partner.projects.list({ externalRef: customerId }).page()
+  const project = found.data[0]
+  if (!project) {
+    return false
+  }
+  const detail = await partner.projects.retrieve(project.id)
+  return detail.channels.some(channel => channel.status === 'active')
+}
+
+// 5: from here on, the customer's traffic uses the project's key, not the partner key.
+function forCustomer(projectApiKey: string): Routa {
+  return new Routa(projectApiKey)
+}
+```
+
+Open the link with `window.open` from your page, or in a new tab: the page that opens is Routa's, and Meta's own dialog cannot run in an iframe. When the attempt ends, the customer's browser is sent to your `redirectUrl` with your `state` unchanged, plus `status`, `project_id` and `channel_id` (or `error`). Check `state` against the customer's session, then confirm as in step 4.
+
+`buildOnboardingLink()` is a pure function: it makes no request and uses Web Crypto only. It also validates its input and throws on what the API would refuse **silently**: the API answers every bad link with the same "this link is not valid" page and no reason, so this is the only place you learn why.
+
+To see your customers' numbers without one call per project, `partner.channels.list()` pages the channels of every project you made. It filters by `status` (`pending`, `active`, `degraded`, `disabled`), `projectId` and `externalRef`, and `partner.projects.list({ hasChannel: false })` finds the projects that never finished the link.
+
+**This cycle is not run by this repository's tests.** The partner key, the signing secret and the partner id come from the dashboard, and the test suite cannot provision them, so the conformance suite covers the API calls (the project, its key, the channel listing, the deletion) but not the signed link opened by a customer, and the README block above is type-checked, not run.
+
+### Rough edges worth knowing
+
+- **`apiKeys.create()` and `apiKeys.rotate()` are not safe to retry.** The API ignores `Idempotency-Key` on them, and the client retries a request whose response never arrived: a lost response can leave two keys issued, or rotate twice and leave you with a secret that is already replaced. If that matters more to you than riding out a network failure, build a client with `maxRetries: 0` for these calls (`new RoutaPartner({ partnerKey, maxRetries: 0 })`). Creating a *project* is different: it is idempotent by `externalRef`.
+- **`projects.delete()` may not be done in one call.** It answers `{ status: 'deleted' }`, or `{ status: 'deleting', projectId }` when the project was large and only part of it was erased; call again until it answers `deleted`. Deleting needs the opt-in `projects:delete` scope, and a project with a channel that is not `disabled` answers `409 project_not_deletable` (`RoutaConflictError`, with `details.reason`).
+- **`partner_api_not_available` is a `RoutaInvalidRequestError`** (`404`), with `code: 'partner_api_not_available'`: the plan has no Partner API, or has lapsed. Check `error.code`, not the class alone.
+- **There is no "confirm channel" method.** Confirming an onboarding is a read, as in step 4. If you have no webhook yet, poll `projects.retrieve()` (or `channels.list({ externalRef })`) with a sensible back-off and a deadline; a customer may never finish.
+- **Sign on click.** A link signed when you send an email is expired by the time it is read. Host a redirector of your own that signs when the customer clicks.
+
+### Partner API security
+
+Treat `ROUTA_PARTNER_KEY` as a root credential.
+
+- **What a leaked partner key reaches.** With the `api_keys:write` scope it can issue a project API key with `messages:write` for *any* project of your organization, so it reaches the send path of **every one of your customers**. That is the price of provisioning by API. Without that scope it can still read and create projects. It never reads a secret that already exists (keys are shown once), never sends a message itself, and never creates or changes a partner key, a signing secret or a redirect origin. Every action taken through it is audited with the key as the actor, and you can revoke it at once in the dashboard.
+- **Give it the narrowest scope.** A new partner key has `projects:read` and `projects:write` only. `api_keys:write`, `webhooks:write`, `channels:write` and `projects:delete` are opt-in: ask for each one on purpose, and for a job that needs a single scope (a report that reads projects) issue a key that has only that.
+- **Restrict it to your servers and give it an expiry.** Set `ipAllowlist` to the addresses your servers call from (the dashboard recommends it when `api_keys:write` is granted) and an expiry, and rotate the key on a schedule. The same goes for the keys you issue with `apiKeys.create()`: pass `ipAllowlist` and `expiresAt`.
+- **Never in the browser.** The partner key and the **signing secret** belong to your server, never to a web page, a mobile app, a front-end bundle or a public repository. The browser only ever receives the finished link: your server signs it, when the customer clicks, and hands the URL back. Anything that runs on your customer's device must be assumed readable by them.
+- **Keep it out of logs and source control.** Read it from the environment or a secret manager. The client never writes it to a log, an error message or a `logger` call.
+
 ## Node.js support
 
 Node.js **22 or later** (`engines.node` is `>=22`). The package ships both ESM and CommonJS builds with bundled type declarations, so it works with `import` and `require`. It relies on the platform `fetch` and Web Crypto APIs and has no runtime dependencies. TypeScript users get strict types for every request and response.

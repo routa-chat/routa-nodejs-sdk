@@ -53,7 +53,7 @@ declare global {
 
 /**
  * Compiles each snippet, as its own module, against the SDK's real source
- * (`@routa-chat/sdk` is mapped to `src/index.ts`) with the repository's strict
+ * (`@routa-chat/sdk` is mapped to `src/index.ts`, and `@routa-chat/sdk/partner` to `src/partner/index.ts`) with the repository's strict
  * compiler options, and returns the compiler's diagnostics — empty when every
  * snippet compiles. It type-checks; it does not run anything, because the
  * snippets hold placeholders (`rt_live_...`, `chan_...`) and need a real
@@ -84,7 +84,12 @@ export function typecheckSnippets(
           declaration: false,
           declarationMap: false,
           typeRoots: [join(ROOT, 'node_modules', '@types')],
-          paths: { '@routa-chat/sdk': [join(ROOT, 'src', 'index.ts')] },
+          paths: {
+            '@routa-chat/sdk': [join(ROOT, 'src', 'index.ts')],
+            '@routa-chat/sdk/partner': [
+              join(ROOT, 'src', 'partner', 'index.ts'),
+            ],
+          },
         },
         include: ['./*.ts'],
       })

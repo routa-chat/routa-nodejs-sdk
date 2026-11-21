@@ -31,6 +31,17 @@ describe('README code blocks', () => {
     expect(code).toContain('RoutaBillingError')
   })
 
+  it('finds the Partner API cycle, imported from the subpath', () => {
+    const code = TS_BLOCKS.map(block => block.code).join('\n')
+
+    expect(code).toContain("from '@routa-chat/sdk/partner'")
+    expect(code).toContain('partner.projects.create(')
+    expect(code).toContain('partner.projects.apiKeys.create(')
+    expect(code).toContain('buildOnboardingLink(')
+    expect(code).toContain('partner.projects.retrieve(')
+    expect(code).toContain('new Routa(projectApiKey)')
+  })
+
   it('every ts block compiles against the SDK source', () => {
     const output = typecheckSnippets(
       TS_BLOCKS.map(block => ({
