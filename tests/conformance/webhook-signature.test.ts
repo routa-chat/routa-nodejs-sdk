@@ -20,13 +20,17 @@ interface FakeEventPayload {
   readonly api_version: string
   readonly schema_version: number
   readonly project_id: string
+  readonly external_ref?: string
   readonly sequence: number
   readonly occurred_at: string
   readonly recorded_at: string
   readonly data: unknown
 }
 
-function buildEventPayload(projectId: string): FakeEventPayload {
+function buildEventPayload(
+  projectId: string,
+  externalRef?: string
+): FakeEventPayload {
   const now = new Date().toISOString()
   return {
     id: `evt_${crypto.randomUUID().replace(/-/g, '')}`,
@@ -34,6 +38,7 @@ function buildEventPayload(projectId: string): FakeEventPayload {
     api_version: 'v1',
     schema_version: 1,
     project_id: projectId,
+    ...(externalRef !== undefined ? { external_ref: externalRef } : {}),
     sequence: 1,
     occurred_at: now,
     recorded_at: now,
@@ -82,6 +87,49 @@ describe('webhook signature — real API server', async () => {
         expect(event.id).toBe(payload.id)
         expect(event.projectId).toBe(project.projectId)
       }
+    }
+  )
+
+  it.skipIf(!canRun)(
+    'externalRef: the delivery carries the project external_ref, and a delivery without one parses to null',
+    async () => {
+      if (!signer) throw new Error('unreachable — canRun guarantees this')
+      const { project, apiKey } = await provisionSharedApiKey(BASE_URL, [
+        'webhooks:write',
+      ])
+      const routa = new Routa({ apiKey: apiKey.secret, baseURL: BASE_URL })
+      const webhook = await routa.webhooks.create({
+        url: 'https://example.com/hooks/routa-sdk-conformance',
+        subscribedTypes: ['message.*'],
+      })
+
+      async function parse(externalRef: string | undefined) {
+        const rawBody = JSON.stringify(
+          buildEventPayload(project.projectId, externalRef)
+        )
+        const header = signer?.buildSignatureHeader(
+          [webhook.secret],
+          Math.floor(Date.now() / 1000),
+          new TextEncoder().encode(rawBody)
+        )
+        return routa.webhooks.constructEvent(
+          rawBody,
+          header ?? null,
+          webhook.secret
+        )
+      }
+
+      const withRef = await parse('cust_conformance_42')
+      const withoutRef = await parse(undefined)
+
+      // The payload is the SDK's own stand-in for a delivery body (signed by the
+      // real signer), so this checks the SDK reads `external_ref` — and an
+      // absent one as `null`, an old stored delivery's case — not that the API
+      // writes it. The events scenario in `contract-fields.test.ts` does the latter.
+      expect('externalRef' in withRef && withRef.externalRef).toBe(
+        'cust_conformance_42'
+      )
+      expect('externalRef' in withoutRef && withoutRef.externalRef).toBeNull()
     }
   )
 

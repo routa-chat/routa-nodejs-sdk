@@ -1,6 +1,8 @@
 import { expectTypeOf, test } from 'vitest'
 import type { RoutaApiError } from '../../src/domain/errors/routa-api-error'
 import { RoutaAuthenticationError } from '../../src/domain/errors/routa-authentication-error'
+import { RoutaBillingError } from '../../src/domain/errors/routa-billing-error'
+import { RoutaConflictError } from '../../src/domain/errors/routa-conflict-error'
 import { RoutaInvalidRequestError } from '../../src/domain/errors/routa-invalid-request-error'
 import { RoutaProviderError } from '../../src/domain/errors/routa-provider-error'
 import { RoutaRateLimitError } from '../../src/domain/errors/routa-rate-limit-error'
@@ -50,4 +52,30 @@ test('RoutaSignatureVerificationError does not extend RoutaApiError', () => {
     'bad signature'
   )
   void wrong
+})
+
+test('RoutaBillingError and RoutaConflictError narrow from a RoutaApiError and expose their details', () => {
+  const error = mapErrorResponse(402, { code: 'free_messages_exhausted' }, 'r')
+
+  if (error instanceof RoutaBillingError) {
+    expectTypeOf(error).toEqualTypeOf<RoutaBillingError>()
+    expectTypeOf(error).toMatchTypeOf<RoutaApiError>()
+    expectTypeOf(error.limit).toEqualTypeOf<number | undefined>()
+    expectTypeOf(error.used).toEqualTypeOf<number | undefined>()
+    expectTypeOf(error.resetsAt).toEqualTypeOf<string | undefined>()
+  }
+
+  if (error instanceof RoutaConflictError) {
+    expectTypeOf(error).toEqualTypeOf<RoutaConflictError>()
+    expectTypeOf(error).toMatchTypeOf<RoutaApiError>()
+    expectTypeOf(error.reason).toEqualTypeOf<string | undefined>()
+  }
+})
+
+test('every RoutaApiError carries the optional type and details', () => {
+  const error = mapErrorResponse(500, { code: 'x' }, 'r')
+  expectTypeOf(error.type).toEqualTypeOf<string | undefined>()
+  expectTypeOf(error.details).toEqualTypeOf<
+    Readonly<Record<string, string | number>> | undefined
+  >()
 })

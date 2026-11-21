@@ -11,10 +11,12 @@ function rawMessage(overrides: Partial<RawMessage> = {}): RawMessage {
     id: 'msg_01J8XA1B2C3D4E5F6G7H8J9K0M',
     channel: 'chan_01J8XA1B2C3D4E5F6G7H8J9K0M',
     direction: 'inbound',
+    origin: null,
     from: '+15550001111',
     to: '+15550002222',
     content: { type: 'text', body: 'Hello from Routa' },
     status: 'read',
+    failure_code: null,
     metadata: { orderId: '42' },
     accepted_at: '2026-08-01T12:00:00.000Z',
     sent_at: null,
@@ -68,5 +70,55 @@ describe('parseMessage() — content removed by plan retention', () => {
     })
 
     expect(() => parseMessage(raw)).toThrow('Unknown message content type')
+  })
+})
+
+describe('parseMessage() — origin', () => {
+  it.each(['api', 'business_app'] as const)(
+    'exposes origin %s on an outbound message',
+    origin => {
+      const message = parseMessage(
+        rawMessage({ direction: 'outbound', origin })
+      )
+
+      expect(message.origin).toBe(origin)
+    }
+  )
+
+  it('keeps origin null on an inbound message', () => {
+    const message = parseMessage(
+      rawMessage({ direction: 'inbound', origin: null })
+    )
+
+    expect(message.origin).toBeNull()
+  })
+})
+
+describe('parseMessage() — failureCode', () => {
+  it('exposes the failure code of a failed message as the plain string the API sends', () => {
+    const message = parseMessage(
+      rawMessage({
+        direction: 'outbound',
+        origin: 'api',
+        status: 'failed',
+        failure_code: 'provider_rejected_request',
+        failed_at: '2026-08-01T12:00:05.000Z',
+      })
+    )
+
+    expect(message.status).toBe('failed')
+    expect(message.failureCode).toBe('provider_rejected_request')
+  })
+
+  it('keeps a failure code this SDK has never seen instead of dropping it', () => {
+    const message = parseMessage(
+      rawMessage({ status: 'failed', failure_code: 'a_code_from_the_future' })
+    )
+
+    expect(message.failureCode).toBe('a_code_from_the_future')
+  })
+
+  it('is null for a message that did not fail', () => {
+    expect(parseMessage(rawMessage()).failureCode).toBeNull()
   })
 })

@@ -1,4 +1,9 @@
-import type { Message, MessageContent, MessageStatus } from './message'
+import type {
+  Message,
+  MessageContent,
+  MessageOrigin,
+  MessageStatus,
+} from './message'
 import { toMessageId } from './message-id'
 
 /**
@@ -10,10 +15,12 @@ export interface RawMessage {
   readonly id: string
   readonly channel: string
   readonly direction: 'outbound' | 'inbound'
+  readonly origin: MessageOrigin | null
   readonly from: string
   readonly to: string
   readonly content: MessageContent | null
   readonly status: MessageStatus
+  readonly failure_code: string | null
   readonly metadata: Record<string, string>
   readonly accepted_at: string
   readonly sent_at: string | null
@@ -35,10 +42,12 @@ export function parseMessage(raw: RawMessage, replayed = false): Message {
     id: toMessageId(raw.id),
     channel: raw.channel,
     direction: raw.direction,
+    origin: raw.origin,
     from: raw.from,
     to: raw.to,
     content: raw.content === null ? null : parseMessageContent(raw.content),
     status: raw.status,
+    failureCode: raw.failure_code,
     metadata: raw.metadata,
     acceptedAt: raw.accepted_at,
     sentAt: raw.sent_at,

@@ -4,9 +4,12 @@ export type { Id } from './domain/branded-id'
 export { isPrefixedId, toId } from './domain/branded-id'
 export type { ChannelId } from './domain/channel-id'
 export { isChannelId, toChannelId } from './domain/channel-id'
+export type { RoutaErrorDetailValues } from './domain/errors/error-details'
 export type { RoutaApiErrorDetails } from './domain/errors/routa-api-error'
 export { RoutaApiError } from './domain/errors/routa-api-error'
 export { RoutaAuthenticationError } from './domain/errors/routa-authentication-error'
+export { RoutaBillingError } from './domain/errors/routa-billing-error'
+export { RoutaConflictError } from './domain/errors/routa-conflict-error'
 export type { RoutaInvalidRequestErrorDetails } from './domain/errors/routa-invalid-request-error'
 export { RoutaInvalidRequestError } from './domain/errors/routa-invalid-request-error'
 export { RoutaProviderError } from './domain/errors/routa-provider-error'
@@ -28,9 +31,19 @@ export type { Media, MediaStatus } from './media/media'
 export type { MediaId } from './media/media-id'
 export { isMediaId, toMediaId } from './media/media-id'
 export { MediaResource } from './media/media-resource'
+export type {
+  UploadMediaFileParams,
+  UploadMediaParams,
+  UploadMediaUrlParams,
+} from './media/upload-media'
 
 export type { ListMessagesParams } from './message/list-messages'
-export type { Message, MessageContent, MessageStatus } from './message/message'
+export type {
+  Message,
+  MessageContent,
+  MessageOrigin,
+  MessageStatus,
+} from './message/message'
 export type { MessageId } from './message/message-id'
 export { isMessageId, toMessageId } from './message/message-id'
 export { MessagesResource } from './message/messages-resource'
@@ -44,13 +57,36 @@ export type { SubmitTemplateParams } from './template/submit-template'
 export type {
   Template,
   TemplateCategory,
+  TemplateFailureCode,
+  TemplateOrigin,
   TemplateRejectionReason,
   TemplateStatus,
+  TemplateUnsupportedComponent,
   TemplateVariable,
 } from './template/template'
+export type {
+  TemplateButton,
+  TemplateComponents,
+  TemplateFooter,
+  TemplateHeader,
+  TemplateHeaderMediaFormat,
+} from './template/template-components'
+export type {
+  TemplateButtonInput,
+  TemplateComponentsInput,
+  TemplateFooterInput,
+  TemplateHeaderInput,
+} from './template/template-components-input'
 export type { TemplateId } from './template/template-id'
 export { isTemplateId, toTemplateId } from './template/template-id'
+export type { TemplateMedia } from './template/template-media'
+export type { TemplateMediaId } from './template/template-media-id'
+export {
+  isTemplateMediaId,
+  toTemplateMediaId,
+} from './template/template-media-id'
 export { TemplatesResource } from './template/templates-resource'
+export type { UploadTemplateMediaParams } from './template/upload-template-media'
 
 export type { Usage, UsageParams, UsageRecord } from './usage-resource'
 export { UsageResource } from './usage-resource'

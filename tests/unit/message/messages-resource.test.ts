@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   HttpClient,
   HttpRequestOptions,
+  HttpResponse,
 } from '../../../src/http/http-client'
 import type { MessageContent } from '../../../src/message/message'
 import { toMessageId } from '../../../src/message/message-id'
@@ -19,8 +20,9 @@ function fakeHttpClient(
       Promise.resolve(requestSpy(options)) as Promise<T>,
     requestWithHeaders: async <T>(
       options: HttpRequestOptions
-    ): Promise<{ data: T; headers: Headers }> => ({
+    ): Promise<HttpResponse<T>> => ({
       data: (await requestSpy(options)) as T,
+      status: 200,
       headers: responseHeaders,
     }),
   }
@@ -48,6 +50,8 @@ function rawMessage(overrides: {
     id: overrides.id ?? MESSAGE_ID,
     channel: 'chan_01J8XA1B2C3D4E5F6G7H8J9K0M',
     direction: 'outbound',
+    origin: 'api',
+    failure_code: null,
     from: '+15550001111',
     to: '+15550002222',
     // `null` is a real value (content removed by retention), so `??` would
@@ -198,10 +202,12 @@ describe('send() — deserialization', () => {
       id: MESSAGE_ID,
       channel: 'chan_01J8XA1B2C3D4E5F6G7H8J9K0M',
       direction: 'outbound',
+      origin: 'api',
       from: '+15550001111',
       to: '+15550002222',
       content: { type: 'text', body: 'Hello from Routa' },
       status: 'accepted',
+      failureCode: null,
       metadata: {},
       acceptedAt: '2026-09-12T12:00:00.000Z',
       sentAt: null,

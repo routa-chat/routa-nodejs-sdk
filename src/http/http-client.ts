@@ -1,4 +1,5 @@
 import type { ResolvedRoutaConfig } from '../config'
+import type { RoutaErrorDetailValues } from '../domain/errors/error-details'
 import { type ErrorEnvelope, mapErrorResponse } from './error-response-mapper'
 import { generateIdempotencyKey } from './idempotency-key-generator'
 import {
@@ -8,13 +9,24 @@ import {
 } from './retry-policy'
 
 /** HTTP methods used by the resources this client will eventually expose. */
-export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
-export interface HttpRequestOptions {
+/**
+ * A request body sent as-is, byte for byte, instead of as JSON — what a media
+ * upload needs. Only fully buffered shapes are accepted (D10): the retry loop
+ * re-sends the request, and a `ReadableStream` is consumed by the first
+ * attempt, so it could not be sent a second time.
+ */
+export interface RawRequestBody {
+  readonly data: Uint8Array | Blob
+  /** Sent verbatim as `Content-Type` — the API reads it to know what the bytes are. */
+  readonly contentType: string
+}
+
+interface HttpRequestBase {
   readonly method: HttpMethod
   /** Path relative to the configured base URL, e.g. `/v1/messages`. */
   readonly path: string
-  readonly body?: unknown
   readonly searchParams?: Record<string, string>
   /**
    * Marks this call as one the real API treats as safe to deduplicate by
@@ -25,6 +37,25 @@ export interface HttpRequestOptions {
   /** Caller-supplied key, reused as-is instead of generating one. */
   readonly idempotencyKey?: string
 }
+
+/** A request with no body, or one sent as JSON. */
+interface HttpJsonRequest extends HttpRequestBase {
+  readonly body?: unknown
+  readonly rawBody?: never
+}
+
+/** A request whose body is raw bytes. Cannot also carry a JSON `body`. */
+interface HttpRawRequest extends HttpRequestBase {
+  readonly rawBody: RawRequestBody
+  readonly body?: never
+}
+
+/**
+ * What a resource hands to `HttpClient`. `body` (JSON) and `rawBody` (bytes)
+ * are mutually exclusive — a union, so passing both fails to compile rather
+ * than being resolved by a runtime check.
+ */
+export type HttpRequestOptions = HttpJsonRequest | HttpRawRequest
 
 /**
  * A request that never got a response — a network failure or a client-side
@@ -58,9 +89,11 @@ export class HttpRequestError extends Error {
   }
 }
 
-/** A parsed response body alongside the raw headers it arrived with, for the rare caller that needs a response header (e.g. `Idempotent-Replay`) the parsed body alone doesn't carry. */
+/** A parsed response body alongside the status and raw headers it arrived with, for the rare caller that needs something the parsed body alone doesn't carry — a response header (e.g. `Idempotent-Replay`), or which success status it was (`200` vs `201`, `202` vs `204`). */
 export interface HttpResponse<T> {
   readonly data: T
+  /** The HTTP status of the successful response (always 2xx — a failure throws). */
+  readonly status: number
   readonly headers: Headers
 }
 
@@ -107,6 +140,7 @@ export function createHttpClient(config: ResolvedRoutaConfig): HttpClient {
       if (httpResponse.ok) {
         return {
           data: await parseSuccessBody<T>(httpResponse),
+          status: httpResponse.status,
           headers: httpResponse.headers,
         }
       }
@@ -154,11 +188,16 @@ export function createHttpClient(config: ResolvedRoutaConfig): HttpClient {
         headers: buildHeaders(
           config.apiKey,
           idempotencyKey,
-          options.body !== undefined
+          contentTypeOf(options)
         ),
         signal: controller.signal,
       }
-      if (options.body !== undefined) {
+      // `Uint8Array` and `Blob` are handed to `fetch` untouched, so every
+      // retry attempt re-sends the very same bytes — neither is consumed by
+      // being sent, unlike a stream.
+      if (options.rawBody !== undefined) {
+        requestInit.body = options.rawBody.data
+      } else if (options.body !== undefined) {
         requestInit.body = JSON.stringify(options.body)
       }
       const httpResponse = await config.fetch(
@@ -202,16 +241,24 @@ function buildUrl(baseURL: string, options: HttpRequestOptions): string {
   return url.toString()
 }
 
+/** The `Content-Type` a request's body needs, or `undefined` when it has none. */
+function contentTypeOf(options: HttpRequestOptions): string | undefined {
+  if (options.rawBody !== undefined) {
+    return options.rawBody.contentType
+  }
+  return options.body !== undefined ? 'application/json' : undefined
+}
+
 function buildHeaders(
   apiKey: string,
   idempotencyKey: string | undefined,
-  hasBody: boolean
+  contentType: string | undefined
 ): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
   }
-  if (hasBody) {
-    headers['Content-Type'] = 'application/json'
+  if (contentType !== undefined) {
+    headers['Content-Type'] = contentType
   }
   if (idempotencyKey) {
     headers['Idempotency-Key'] = idempotencyKey
@@ -237,10 +284,12 @@ async function parseSuccessBody<T>(response: Response): Promise<T> {
  * the header is present on every response, success or failure.
  */
 interface ErrorResponseBody {
+  readonly type?: string
   readonly code?: string
   readonly message?: string
   readonly param?: string
   readonly doc_url?: string
+  readonly details?: RoutaErrorDetailValues
 }
 
 async function parseErrorEnvelope(response: Response): Promise<ErrorEnvelope> {
@@ -248,6 +297,8 @@ async function parseErrorEnvelope(response: Response): Promise<ErrorEnvelope> {
   const retryAfterMs = parseRetryAfterMs(response.headers.get('Retry-After'))
 
   return {
+    ...(typeof body?.type === 'string' ? { type: body.type } : {}),
+    ...(isErrorDetails(body?.details) ? { details: body.details } : {}),
     ...(body?.code !== undefined ? { code: body.code } : {}),
     ...(body?.message !== undefined ? { message: body.message } : {}),
     ...(body?.param !== undefined ? { param: body.param } : {}),
@@ -256,6 +307,18 @@ async function parseErrorEnvelope(response: Response): Promise<ErrorEnvelope> {
       ? { retryAfter: Math.round(retryAfterMs / 1000) }
       : {}),
   }
+}
+
+/** `error.details` is only trusted when it really is an object of strings and numbers — a proxy's body may carry anything under that key. */
+function isErrorDetails(value: unknown): value is RoutaErrorDetailValues {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      entry => typeof entry === 'string' || typeof entry === 'number'
+    )
+  )
 }
 
 async function parseErrorResponseBody(

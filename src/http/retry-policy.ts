@@ -7,7 +7,9 @@ const BACKOFF_CAP_MS = 8_000
  *
  * Auth, not-found and validation failures (401/403/404/422) are excluded on
  * purpose — retrying a request the server has already rejected as invalid or
- * unauthorized just repeats the same failure. A `409` is retryable only when
+ * unauthorized just repeats the same failure. So is `402`: a billing refusal
+ * (quota used up, payment failed) lasts until someone changes the plan, and
+ * the API reserves `429` for the answer clients should retry. A `409` is retryable only when
  * it means "try again shortly" (an in-flight duplicate of the same write),
  * never when it means the same idempotency key was reused with a different
  * body — that is a client mistake retrying cannot fix.

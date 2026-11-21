@@ -1,7 +1,15 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // Two entry points. `partner` is the experimental Partner API client; the
+  // bundler extracts whatever both entries use (the HTTP transport, the error
+  // classes, the HMAC helper) into shared chunks, so `RoutaApiError` is one
+  // class for both and `error instanceof RoutaApiError` holds across them.
+  // `index` must never reach `src/partner/` — tests/unit/architecture proves it.
+  entry: {
+    index: 'src/index.ts',
+    partner: 'src/partner/index.ts',
+  },
   format: ['esm', 'cjs'],
   target: 'es2022',
   platform: 'neutral',

@@ -5,6 +5,7 @@ import { EventsResource } from '../../../src/event/events-resource'
 import type {
   HttpClient,
   HttpRequestOptions,
+  HttpResponse,
 } from '../../../src/http/http-client'
 
 function fakeHttpClient(
@@ -15,8 +16,9 @@ function fakeHttpClient(
       Promise.resolve(requestSpy(options)) as Promise<T>,
     requestWithHeaders: async <T>(
       options: HttpRequestOptions
-    ): Promise<{ data: T; headers: Headers }> => ({
+    ): Promise<HttpResponse<T>> => ({
       data: (await requestSpy(options)) as T,
+      status: 200,
       headers: new Headers(),
     }),
   }
@@ -28,6 +30,7 @@ function rawEvent(overrides: {
   id?: string
   type?: EventType
   data?: unknown
+  external_ref?: string | null
 }): RawEvent {
   return {
     id: overrides.id ?? EVENT_ID,
@@ -35,6 +38,7 @@ function rawEvent(overrides: {
     api_version: '2026-01-01',
     schema_version: 1,
     project_id: 'proj_01J8XA1B2C3D4E5F6G7H8J9K0M',
+    external_ref: overrides.external_ref ?? null,
     sequence: 42,
     occurred_at: '2026-09-12T12:00:00.000Z',
     recorded_at: '2026-09-12T12:00:01.000Z',
@@ -56,6 +60,10 @@ const KNOWN_EVENT_TYPES: EventType[] = [
   'template.rejected',
   'template.paused',
   'template.disabled',
+  'template.failed',
+  'template.category_changed',
+  'template.updated',
+  'template.deleted',
 ]
 
 describe('parseEvent()', () => {
@@ -68,6 +76,7 @@ describe('parseEvent()', () => {
       apiVersion: '2026-01-01',
       schemaVersion: 1,
       projectId: 'proj_01J8XA1B2C3D4E5F6G7H8J9K0M',
+      externalRef: null,
       sequence: 42,
       occurredAt: '2026-09-12T12:00:00.000Z',
       recordedAt: '2026-09-12T12:00:01.000Z',
@@ -86,6 +95,22 @@ describe('parseEvent()', () => {
       type: 'something.unknown',
       data: { messageId: 'msg_1' },
     })
+  })
+
+  it('exposes the project external_ref as externalRef', () => {
+    const event = parseEvent(rawEvent({ external_ref: 'lead_8841' }))
+
+    expect(event).toMatchObject({ externalRef: 'lead_8841' })
+  })
+
+  it('reads an event without external_ref as externalRef: null — an additive field a stored delivery may predate', () => {
+    const { external_ref: _omitted, ...withoutExternalRef } = rawEvent({})
+
+    expect(parseEvent(withoutExternalRef)).toMatchObject({ externalRef: null })
+  })
+
+  it('knows exactly the 17 event types the API publishes', () => {
+    expect(new Set(KNOWN_EVENT_TYPES).size).toBe(17)
   })
 
   it('passes data through unparsed', () => {

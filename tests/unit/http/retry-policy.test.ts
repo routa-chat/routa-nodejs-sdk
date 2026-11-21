@@ -26,6 +26,25 @@ describe('isRetryableFailure', () => {
     expect(isRetryableFailure(409, 'idempotency_key_reuse')).toBe(false)
   })
 
+  it.each([
+    'subscription_required',
+    'payment_failed',
+    'free_messages_exhausted',
+    'message_quota_exceeded',
+    undefined,
+  ])('never retries 402 (billing) — code %s', code => {
+    expect(isRetryableFailure(402, code)).toBe(false)
+  })
+
+  it.each([
+    'template_not_editable',
+    'project_not_deletable',
+    'webhook_delivery_not_replayable',
+    undefined,
+  ])('never retries a 409 conflict — code %s', code => {
+    expect(isRetryableFailure(409, code)).toBe(false)
+  })
+
   it('never retries 422 (validation/content rejected)', () => {
     expect(isRetryableFailure(422, 'content_rejected')).toBe(false)
   })

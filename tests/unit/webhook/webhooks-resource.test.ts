@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   HttpClient,
   HttpRequestOptions,
+  HttpResponse,
 } from '../../../src/http/http-client'
 import { toWebhookId } from '../../../src/webhook/webhook-id'
 import type { RawWebhook } from '../../../src/webhook/webhook-mapper'
@@ -15,8 +16,9 @@ function fakeHttpClient(
       Promise.resolve(requestSpy(options)) as Promise<T>,
     requestWithHeaders: async <T>(
       options: HttpRequestOptions
-    ): Promise<{ data: T; headers: Headers }> => ({
+    ): Promise<HttpResponse<T>> => ({
       data: (await requestSpy(options)) as T,
+      status: 200,
       headers: new Headers(),
     }),
   }

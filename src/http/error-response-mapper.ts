@@ -1,8 +1,11 @@
+import type { RoutaErrorDetailValues } from '../domain/errors/error-details'
 import {
   RoutaApiError,
   type RoutaApiErrorDetails,
 } from '../domain/errors/routa-api-error'
 import { RoutaAuthenticationError } from '../domain/errors/routa-authentication-error'
+import { RoutaBillingError } from '../domain/errors/routa-billing-error'
+import { RoutaConflictError } from '../domain/errors/routa-conflict-error'
 import { RoutaInvalidRequestError } from '../domain/errors/routa-invalid-request-error'
 import { RoutaRateLimitError } from '../domain/errors/routa-rate-limit-error'
 
@@ -18,6 +21,10 @@ export interface ErrorEnvelope {
   readonly message?: string
   readonly param?: string
   readonly docUrl?: string
+  /** The API's error category (`billing_error`, …); absent from a proxy's response. */
+  readonly type?: string
+  /** The response's `error.details`; absent when the error defines none. */
+  readonly details?: RoutaErrorDetailValues
   /** Seconds to wait before retrying, parsed from a `Retry-After` header. */
   readonly retryAfter?: number
 }
@@ -29,7 +36,7 @@ const UNKNOWN_ERROR_CODE = 'unknown_error'
  * Every HTTP status this SDK has a specific error subclass for, keyed with
  * `satisfies` so the literal statuses stay available to `isMappedStatus`
  * below instead of widening to `number`. A status outside this table (a
- * `409` conflict, a `5xx` infrastructure failure, or anything undocumented)
+ * `5xx` infrastructure failure, or anything undocumented)
  * falls back to the base `RoutaApiError` — this table never guesses a more
  * specific subtype than the response gives evidence for.
  */
@@ -37,6 +44,8 @@ const ERROR_CLASS_BY_STATUS = {
   401: RoutaAuthenticationError,
   403: RoutaInvalidRequestError,
   404: RoutaInvalidRequestError,
+  402: RoutaBillingError,
+  409: RoutaConflictError,
   422: RoutaInvalidRequestError,
   429: RoutaRateLimitError,
 } satisfies Record<number, typeof RoutaApiError>
@@ -64,6 +73,8 @@ export function mapErrorResponse(
     requestId,
     docUrl: envelope.docUrl,
     statusCode: status,
+    type: envelope.type,
+    details: envelope.details,
   }
 
   if (!isMappedStatus(status)) {
@@ -73,6 +84,10 @@ export function mapErrorResponse(
   switch (status) {
     case 401:
       return new RoutaAuthenticationError(message, details)
+    case 402:
+      return new RoutaBillingError(message, details)
+    case 409:
+      return new RoutaConflictError(message, details)
     case 403:
     case 404:
     case 422:
