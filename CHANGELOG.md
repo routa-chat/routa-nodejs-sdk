@@ -1,5 +1,13 @@
 # @routa-chat/sdk
 
+## 0.4.0
+
+### Minor Changes
+
+- [#8](https://github.com/routa-chat/routa-nodejs-sdk/pull/8) [`f0676bf`](https://github.com/routa-chat/routa-nodejs-sdk/commit/f0676bf51ea7e35814f6956f75915d7331f4b488) Thanks [@nathvnfwck](https://github.com/nathvnfwck)! - Partner API (experimental): `partner.webhook.constructEvent()`.
+  
+  A partner can now verify a delivery of its webhook with the `RoutaPartner` it already has, instead of building a `Routa` on some project key only to reach `routa.webhooks.constructEvent()`. It is the same verification, local and with no network call, returning the same `RoutaEvent` (`projectId` and `externalRef` say which customer it is about). It accepts one secret or several, for a rotation overlap.
+
 ## 0.3.0
 
 ### Minor Changes
