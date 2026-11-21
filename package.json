@@ -31,6 +31,13 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "partner": [
+        "./dist/partner.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "import": {
@@ -40,6 +47,16 @@
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./partner": {
+      "import": {
+        "types": "./dist/partner.d.ts",
+        "default": "./dist/partner.js"
+      },
+      "require": {
+        "types": "./dist/partner.d.cts",
+        "default": "./dist/partner.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -60,7 +77,8 @@
     "test": "vitest run",
     "openapi:diff": "node scripts/openapi-diff.ts",
     "test:types": "vitest --typecheck --run tests/types",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:types && pnpm run build",
+    "check:package": "publint --level error && attw --pack .",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:types && pnpm run build && pnpm run check:package",
     "prepublishOnly": "pnpm run check",
     "changeset": "changeset",
     "version": "changeset version",
