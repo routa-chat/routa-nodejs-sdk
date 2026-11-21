@@ -1,29 +1,19 @@
+import { hmacSha256Hex } from '../crypto/hmac-sha256-hex'
+
 /** How far a signed timestamp may drift from "now" before it is rejected. */
 export const SIGNATURE_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000
 
-/**
- * `HMAC-SHA256(secret, "{timestamp}." + rawBody)`, computed with the Web
- * Crypto API rather than a Node-only module — this runs on every target
- * runtime (Node, Bun, Deno, edge) without a platform-specific import.
- */
+/** `HMAC-SHA256(secret, "{timestamp}." + rawBody)`, as lowercase hex. */
 export async function computeSignature(
   secret: string,
   timestampSeconds: number,
   rawBody: Uint8Array
 ): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
   const prefix = new TextEncoder().encode(`${timestampSeconds}.`)
   const message = new Uint8Array(prefix.length + rawBody.length)
   message.set(prefix, 0)
   message.set(rawBody, prefix.length)
-  const digest = await crypto.subtle.sign('HMAC', key, message)
-  return toHex(new Uint8Array(digest))
+  return hmacSha256Hex(secret, message)
 }
 
 /** `t=…,v1=…` — one `v1=` per secret, so a rotation overlap needs no special casing on the receiving end. */
@@ -76,14 +66,6 @@ export function parseSignatureHeader(
     return null
   }
   return { timestampSeconds, signatures }
-}
-
-function toHex(bytes: Uint8Array): string {
-  let hex = ''
-  for (const byte of bytes) {
-    hex += byte.toString(16).padStart(2, '0')
-  }
-  return hex
 }
 
 /** `null` for an odd-length or non-hex string, rather than throwing — malformed input is a normal, expected case here. */

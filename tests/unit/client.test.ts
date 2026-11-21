@@ -28,6 +28,31 @@ describe('Routa', () => {
     expect(() => new Routa('')).toThrow(/apiKey/)
   })
 
+  describe('a partner key', () => {
+    it.each([
+      ['the shorthand string', (key: string) => new Routa(key)],
+      ['a config object', (key: string) => new Routa({ apiKey: key })],
+    ])(
+      'is refused synchronously, without any request, via %s',
+      (_label, make) => {
+        expect(() => make('rt_partner_0123456789abcdef')).toThrow(
+          /partner key.*RoutaPartner.*@routa-chat\/sdk\/partner/s
+        )
+      }
+    )
+
+    it('does not echo the key in the message', () => {
+      expect(() => new Routa('rt_partner_SECRETVALUE1234')).not.toThrow(
+        /SECRETVALUE/
+      )
+    })
+
+    it('still lets a project API key through', () => {
+      expect(() => new Routa('rt_live_abcdefghijklmnopqrstuv')).not.toThrow()
+      expect(() => new Routa('rt_test_abcdefghijklmnopqrstuv')).not.toThrow()
+    })
+  })
+
   it('wires every public resource namespace', () => {
     const routa = new Routa({ apiKey: 'rt_test_123' })
 

@@ -12,6 +12,12 @@ describe('resolveConfig', () => {
     expect(() => resolveConfig({ apiKey: '' })).toThrow(/apiKey/)
   })
 
+  it('refuses a partner key, which only the Partner API accepts', () => {
+    expect(() => resolveConfig({ apiKey: 'rt_partner_abc' })).toThrow(
+      /partner key.*RoutaPartner/s
+    )
+  })
+
   it('fills in every default when only apiKey is provided', () => {
     const resolved = resolveConfig({ apiKey: 'rt_test_123' })
 
