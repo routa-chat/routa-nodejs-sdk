@@ -1,4 +1,5 @@
 import type { ResolvedRoutaConfig } from '../config'
+import type { RoutaErrorDetailValues } from '../domain/errors/error-details'
 import { type ErrorEnvelope, mapErrorResponse } from './error-response-mapper'
 import { generateIdempotencyKey } from './idempotency-key-generator'
 import {
@@ -237,10 +238,12 @@ async function parseSuccessBody<T>(response: Response): Promise<T> {
  * the header is present on every response, success or failure.
  */
 interface ErrorResponseBody {
+  readonly type?: string
   readonly code?: string
   readonly message?: string
   readonly param?: string
   readonly doc_url?: string
+  readonly details?: RoutaErrorDetailValues
 }
 
 async function parseErrorEnvelope(response: Response): Promise<ErrorEnvelope> {
@@ -248,6 +251,8 @@ async function parseErrorEnvelope(response: Response): Promise<ErrorEnvelope> {
   const retryAfterMs = parseRetryAfterMs(response.headers.get('Retry-After'))
 
   return {
+    ...(typeof body?.type === 'string' ? { type: body.type } : {}),
+    ...(isErrorDetails(body?.details) ? { details: body.details } : {}),
     ...(body?.code !== undefined ? { code: body.code } : {}),
     ...(body?.message !== undefined ? { message: body.message } : {}),
     ...(body?.param !== undefined ? { param: body.param } : {}),
@@ -256,6 +261,18 @@ async function parseErrorEnvelope(response: Response): Promise<ErrorEnvelope> {
       ? { retryAfter: Math.round(retryAfterMs / 1000) }
       : {}),
   }
+}
+
+/** `error.details` is only trusted when it really is an object of strings and numbers — a proxy's body may carry anything under that key. */
+function isErrorDetails(value: unknown): value is RoutaErrorDetailValues {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      entry => typeof entry === 'string' || typeof entry === 'number'
+    )
+  )
 }
 
 async function parseErrorResponseBody(

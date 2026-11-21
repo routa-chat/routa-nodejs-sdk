@@ -15,6 +15,11 @@ export interface RawEvent {
   readonly api_version: string
   readonly schema_version: number
   readonly project_id: string
+  /**
+   * Absent from an event recorded or delivered before the field existed —
+   * an additive field, so a stored webhook delivery may not carry it.
+   */
+  readonly external_ref?: string | null | undefined
   readonly sequence: number
   readonly occurred_at: string
   readonly recorded_at: string
@@ -37,6 +42,7 @@ export function parseEvent(raw: RawEvent): RoutaEvent {
     apiVersion: raw.api_version,
     schemaVersion: raw.schema_version,
     projectId: raw.project_id,
+    externalRef: raw.external_ref ?? null,
     sequence: raw.sequence,
     occurredAt: raw.occurred_at,
     recordedAt: raw.recorded_at,

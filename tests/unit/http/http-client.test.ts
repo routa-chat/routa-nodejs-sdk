@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { type RoutaConfig, resolveConfig } from '../../../src/config'
+import { RoutaApiError } from '../../../src/domain/errors/routa-api-error'
+import { RoutaBillingError } from '../../../src/domain/errors/routa-billing-error'
+import { RoutaConflictError } from '../../../src/domain/errors/routa-conflict-error'
 import { createHttpClient } from '../../../src/http/http-client'
 
 function buildClient(
@@ -219,12 +222,22 @@ const NON_RETRYABLE_CASES: Array<{
   code: string | undefined
 }> = [
   { name: '401 authentication error', status: 401, code: 'api_key_invalid' },
+  {
+    name: '402 billing error',
+    status: 402,
+    code: 'free_messages_exhausted',
+  },
   { name: '403 insufficient scope', status: 403, code: 'insufficient_scope' },
   { name: '404 not found', status: 404, code: 'message_not_found' },
   {
     name: '409 idempotency_key_reuse',
     status: 409,
     code: 'idempotency_key_reuse',
+  },
+  {
+    name: '409 template_not_editable',
+    status: 409,
+    code: 'template_not_editable',
   },
   { name: '422 invalid request', status: 422, code: 'content_rejected' },
 ]
@@ -247,6 +260,105 @@ describe.each(NON_RETRYABLE_CASES)(
     })
   }
 )
+
+describe('request — error envelope type and details', () => {
+  it('throws a RoutaBillingError with the numbers of error.details, after one attempt', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            type: 'billing_error',
+            code: 'free_messages_exhausted',
+            message: 'The 10 free messages are used up.',
+            details: { limit: 10, used: 10 },
+            request_id: 'req_1',
+          },
+        },
+        { 'Routa-Request-Id': 'req_1' },
+        402
+      )
+    )
+    const client = buildClient(fetchSpy)
+
+    const error = await client
+      .request({ method: 'POST', path: '/v1/messages' })
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(RoutaBillingError)
+    expect(error).toMatchObject({
+      statusCode: 402,
+      code: 'free_messages_exhausted',
+      type: 'billing_error',
+      limit: 10,
+      used: 10,
+      requestId: 'req_1',
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('throws a RoutaConflictError for a 409 and does not retry it', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            type: 'conflict_error',
+            code: 'project_not_deletable',
+            message: 'The project cannot be deleted.',
+            details: { reason: 'has_enabled_channel' },
+            request_id: 'req_2',
+          },
+        },
+        {},
+        409
+      )
+    )
+    const client = buildClient(fetchSpy)
+
+    const error = await client
+      .request({ method: 'DELETE', path: '/v1/projects/proj_1' })
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(RoutaConflictError)
+    expect(error).toMatchObject({ reason: 'has_enabled_channel' })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('throws a plain RoutaApiError, with no type or details, for a proxy 502 that has no envelope', async () => {
+    const fetchSpy = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response('<html>Bad Gateway</html>', { status: 502 })
+      )
+    const client = buildClient(fetchSpy, { maxRetries: 0 })
+
+    const error = await client
+      .request({ method: 'GET', path: '/v1/whoami' })
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(RoutaApiError)
+    expect(error).toMatchObject({ type: undefined, details: undefined })
+  })
+
+  it('ignores an error.details that is not an object of strings and numbers', async () => {
+    const fetchSpy = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: 'x', details: { nested: { a: 1 } } } },
+          {},
+          402
+        )
+      )
+    const client = buildClient(fetchSpy)
+
+    const error = await client
+      .request({ method: 'POST', path: '/v1/messages' })
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(RoutaBillingError)
+    expect(error).toMatchObject({ details: undefined, limit: undefined })
+  })
+})
 
 const RETRYABLE_HTTP_CASES: Array<{
   name: string

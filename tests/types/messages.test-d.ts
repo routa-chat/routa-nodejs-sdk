@@ -1,7 +1,11 @@
 import { expectTypeOf, test } from 'vitest'
 import { toChannelId } from '../../src/domain/channel-id'
 import type { Page } from '../../src/domain/pagination'
-import type { Message, MessageContent } from '../../src/message/message'
+import type {
+  Message,
+  MessageContent,
+  MessageOrigin,
+} from '../../src/message/message'
 import { toMessageId } from '../../src/message/message-id'
 import type { MessagesResource } from '../../src/message/messages-resource'
 import type { SendMessageParams } from '../../src/message/send-message'
@@ -119,4 +123,15 @@ test('Message.content is nullable and narrows to MessageContent after a guard', 
 
 test('Message.contentRedactedAt is string | null', () => {
   expectTypeOf<Message['contentRedactedAt']>().toEqualTypeOf<string | null>()
+})
+
+test("Message['origin'] is 'api' | 'business_app' | null", () => {
+  expectTypeOf<Message['origin']>().toEqualTypeOf<
+    'api' | 'business_app' | null
+  >()
+  expectTypeOf<Message['origin']>().toEqualTypeOf<MessageOrigin | null>()
+})
+
+test("Message['failureCode'] is a plain string | null, not a union the API does not publish", () => {
+  expectTypeOf<Message['failureCode']>().toEqualTypeOf<string | null>()
 })

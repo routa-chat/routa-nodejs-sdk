@@ -192,7 +192,7 @@ export async function handleWebhook(request: Request): Promise<Response> {
 }
 ```
 
-Event types the SDK knows include `message.accepted`, `message.sent`, `message.delivered`, `message.read`, `message.failed`, `message.received`, `channel.status_changed` and `template.*`. An event type introduced after your installed version still parses; it arrives as a generic event with a plain `string` `type` and `unknown` `data`, so it is safe to ignore.
+Event types the SDK knows include `message.accepted`, `message.sent`, `message.delivered`, `message.read`, `message.failed`, `message.received`, `channel.status_changed` and `template.*` (`submitted`, `pending`, `approved`, `rejected`, `paused`, `disabled`, `failed`, `category_changed`, `updated`, `deleted`). Every event also carries `externalRef`, the project's own `external_ref` or `null`. An event type introduced after your installed version still parses; it arrives as a generic event with a plain `string` `type` and `unknown` `data`, so it is safe to ignore.
 
 While a secret is being rotated, pass both to accept either: `constructEvent(rawBody, header, [newSecret, oldSecret])`.
 
@@ -200,19 +200,25 @@ If your endpoint was down, `routa.events.list()` returns the events you missed.
 
 ## Error handling
 
-Every error the API returns is thrown as a `RoutaApiError` or one of its subclasses. All of them carry `code`, `statusCode`, `requestId` (quote it when contacting support) and, when the API sent one, `docUrl`.
+Every error the API returns is thrown as a `RoutaApiError` or one of its subclasses. All of them carry `code`, `statusCode`, `requestId` (quote it when contacting support) and, when the API sent them, `docUrl`, `type` (the API's error category, such as `billing_error`) and `details` (machine-readable values some errors define).
 
 | HTTP status | Class | Extra fields |
 | --- | --- | --- |
 | 401 | `RoutaAuthenticationError` | — |
+| 402 | `RoutaBillingError` | `limit`, `used`, `resetsAt` — only for the codes that define them (see below) |
 | 403, 404, 422 | `RoutaInvalidRequestError` | `param` — the request field at fault, when known |
+| 409 | `RoutaConflictError` | `reason` — what stands in the way, when the API says |
 | 429 | `RoutaRateLimitError` | `retryAfter` — seconds to wait, when the server sent it |
-| anything else (409, 5xx, …) | `RoutaApiError` | — |
+| anything else (5xx, …) | `RoutaApiError` | — |
+
+A `402` means the plan or payment state refused the request: `free_messages_exhausted` and `message_quota_exceeded` carry `limit` and `used` (the latter also `resetsAt`), `project_limit_exceeded` and `channel_limit_exceeded` carry `limit`, and `subscription_required` and `payment_failed` carry no numbers. Each field is `undefined` when the code does not define it.
 
 ```ts
 import {
   RoutaApiError,
   RoutaAuthenticationError,
+  RoutaBillingError,
+  RoutaConflictError,
   RoutaInvalidRequestError,
   RoutaRateLimitError,
 } from '@routa-chat/sdk'
@@ -226,6 +232,11 @@ try {
 } catch (error) {
   if (error instanceof RoutaAuthenticationError) {
     // Missing, invalid or revoked API key. Retrying will not help.
+  } else if (error instanceof RoutaBillingError) {
+    // Out of free messages or plan allowance: stop sending until it is fixed.
+    console.error(`Blocked (${error.code}): ${error.used ?? '?'}/${error.limit ?? '?'}`)
+  } else if (error instanceof RoutaConflictError) {
+    console.error(`Conflict (${error.code}): ${error.message}`)
   } else if (error instanceof RoutaRateLimitError) {
     console.warn(`Rate limited; retry in ${error.retryAfter ?? '?'}s`)
   } else if (error instanceof RoutaInvalidRequestError) {
@@ -264,7 +275,7 @@ const routa = new Routa({
 | `logger` | no-op | An object with `debug`, `warn` and `error` methods. It receives request diagnostics such as retries. It never receives your API key or request and response bodies, and the SDK never writes to `console` itself. |
 | `fetch` | global `fetch` | Replaces the `fetch` used for every request, for example to inject a proxy agent or a test double. |
 
-**Retries.** The client retries network failures, `429`, `5xx`, and a `409` that means an identical request is still in flight. It waits with exponential backoff and jitter, and honors `Retry-After` when the server sends it. Other `4xx` responses are never retried.
+**Retries.** The client retries network failures, `429`, `5xx`, and a `409` that means an identical request is still in flight. It waits with exponential backoff and jitter, and honors `Retry-After` when the server sends it. Other `4xx` responses are never retried — including `402` (a billing refusal lasts until the plan changes) and every `409` except the in-flight one.
 
 **Idempotency.** `messages.send()` sends an `Idempotency-Key` automatically and reuses it on every retry, so a retried send cannot create a second message. Pass your own with `send({ ..., idempotencyKey })`. When a call returns the result of an earlier attempt, `message._replayed` is `true`. The server deduplicates only `messages.send()`; set `maxRetries: 0` if you need to avoid retries on other write calls.
 

@@ -13,6 +13,14 @@ export type MessageStatus =
   | 'failed'
 
 /**
+ * Who put an outbound message on the wire: `api` is a message dispatched
+ * through Routa (billed); `business_app` is one the business sent from the
+ * WhatsApp Business app on a line in coexistence — Routa did not dispatch
+ * it and does not bill it. `null` for an inbound message.
+ */
+export type MessageOrigin = 'api' | 'business_app'
+
+/**
  * Every shape a message's `content` can take. This union is deliberately
  * wider than what `messages.send()` accepts — it also covers content types
  * that only ever arrive on an inbound or historical message (media,
@@ -64,6 +72,8 @@ export interface Message {
   readonly id: MessageId
   readonly channel: string
   readonly direction: 'outbound' | 'inbound'
+  /** `null` for an inbound message. */
+  readonly origin: MessageOrigin | null
   readonly from: string
   readonly to: string
   /**
@@ -73,6 +83,13 @@ export interface Message {
    */
   readonly content: MessageContent | null
   readonly status: MessageStatus
+  /**
+   * Why the message failed — non-`null` only when `status` is `failed`. The
+   * set of codes is Routa's own and closed, but the API publishes it as a
+   * plain `string`, so this is not narrowed to a union: compare against the
+   * codes you handle and treat any other value as "failed, reason unknown".
+   */
+  readonly failureCode: string | null
   readonly metadata: Record<string, string>
   /** ISO 8601 — always present, set the moment Routa accepts the message. */
   readonly acceptedAt: string

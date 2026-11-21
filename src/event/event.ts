@@ -14,6 +14,10 @@ const EVENT_TYPES = [
   'template.rejected',
   'template.paused',
   'template.disabled',
+  'template.failed',
+  'template.category_changed',
+  'template.updated',
+  'template.deleted',
 ] as const
 
 /**
@@ -35,6 +39,11 @@ interface RoutaEventEnvelope {
   readonly apiVersion: string
   readonly schemaVersion: number
   readonly projectId: string
+  /**
+   * The project's own `external_ref` — the partner's id for the customer
+   * behind the project — or `null` for a project that has none.
+   */
+  readonly externalRef: string | null
   readonly sequence: number
   readonly occurredAt: string
   readonly recordedAt: string
@@ -69,4 +78,8 @@ export type RoutaEvent =
   | (RoutaEventEnvelope & { readonly type: 'template.rejected' })
   | (RoutaEventEnvelope & { readonly type: 'template.paused' })
   | (RoutaEventEnvelope & { readonly type: 'template.disabled' })
+  | (RoutaEventEnvelope & { readonly type: 'template.failed' })
+  | (RoutaEventEnvelope & { readonly type: 'template.category_changed' })
+  | (RoutaEventEnvelope & { readonly type: 'template.updated' })
+  | (RoutaEventEnvelope & { readonly type: 'template.deleted' })
   | { readonly type: string; readonly data: unknown }

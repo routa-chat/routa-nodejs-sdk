@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { RoutaApiError } from '../../../src/domain/errors/routa-api-error'
 import { RoutaAuthenticationError } from '../../../src/domain/errors/routa-authentication-error'
+import { RoutaBillingError } from '../../../src/domain/errors/routa-billing-error'
+import { RoutaConflictError } from '../../../src/domain/errors/routa-conflict-error'
 import { RoutaInvalidRequestError } from '../../../src/domain/errors/routa-invalid-request-error'
 import { RoutaProviderError } from '../../../src/domain/errors/routa-provider-error'
 import { RoutaRateLimitError } from '../../../src/domain/errors/routa-rate-limit-error'
@@ -27,6 +29,18 @@ const MAPPING_TABLE: ReadonlyArray<{
     codes: ['insufficient_scope'],
   },
   {
+    status: 402,
+    expectedClass: RoutaBillingError,
+    codes: [
+      'subscription_required',
+      'payment_failed',
+      'free_messages_exhausted',
+      'message_quota_exceeded',
+      'project_limit_exceeded',
+      'channel_limit_exceeded',
+    ],
+  },
+  {
     status: 404,
     expectedClass: RoutaInvalidRequestError,
     codes: [
@@ -40,12 +54,15 @@ const MAPPING_TABLE: ReadonlyArray<{
   },
   {
     status: 409,
-    expectedClass: RoutaApiError,
+    expectedClass: RoutaConflictError,
     codes: [
       'idempotency_in_progress',
       'idempotency_key_reuse',
       'webhook_delivery_not_replayable',
       'email_already_registered',
+      'template_not_editable',
+      'channel_not_disabled',
+      'project_not_deletable',
     ],
   },
   {
@@ -150,6 +167,128 @@ describe('mapErrorResponse — 429 carries retryAfter', () => {
   })
 })
 
+describe('mapErrorResponse — type and details', () => {
+  it('carries the API error type and details on any error', () => {
+    const error = mapErrorResponse(
+      500,
+      { code: 'x', type: 'api_error', details: { limit: 5 } },
+      REQUEST_ID
+    )
+    expect(error.type).toBe('api_error')
+    expect(error.details).toEqual({ limit: 5 })
+  })
+
+  it('leaves type and details undefined for a response that has none, such as a proxy’s', () => {
+    const error = mapErrorResponse(502, { code: 'x' }, REQUEST_ID)
+    expect(error.type).toBeUndefined()
+    expect(error.details).toBeUndefined()
+  })
+})
+
+describe('mapErrorResponse — 402 is a RoutaBillingError carrying the numbers', () => {
+  it('exposes limit and used of free_messages_exhausted', () => {
+    const error = mapErrorResponse(
+      402,
+      {
+        code: 'free_messages_exhausted',
+        type: 'billing_error',
+        details: { limit: 10, used: 10 },
+      },
+      REQUEST_ID
+    )
+
+    expect(error).toBeInstanceOf(RoutaBillingError)
+    expect(error).toBeInstanceOf(RoutaApiError)
+    const billing = error as RoutaBillingError
+    expect(billing.limit).toBe(10)
+    expect(billing.used).toBe(10)
+    expect(billing.resetsAt).toBeUndefined()
+    expect(billing.statusCode).toBe(402)
+    expect(billing.type).toBe('billing_error')
+  })
+
+  it('also exposes resetsAt of message_quota_exceeded', () => {
+    const error = mapErrorResponse(
+      402,
+      {
+        code: 'message_quota_exceeded',
+        details: {
+          limit: 1000,
+          used: 1000,
+          resets_at: '2026-12-01T00:00:00.000Z',
+        },
+      },
+      REQUEST_ID
+    ) as RoutaBillingError
+
+    expect(error.limit).toBe(1000)
+    expect(error.used).toBe(1000)
+    expect(error.resetsAt).toBe('2026-12-01T00:00:00.000Z')
+  })
+
+  it('exposes only limit for a project or channel limit', () => {
+    const error = mapErrorResponse(
+      402,
+      { code: 'channel_limit_exceeded', details: { limit: 3 } },
+      REQUEST_ID
+    ) as RoutaBillingError
+
+    expect(error.limit).toBe(3)
+    expect(error.used).toBeUndefined()
+  })
+
+  it('has no numbers when the API sent no details (subscription_required)', () => {
+    const error = mapErrorResponse(
+      402,
+      { code: 'subscription_required' },
+      REQUEST_ID
+    ) as RoutaBillingError
+
+    expect(error.limit).toBeUndefined()
+    expect(error.used).toBeUndefined()
+    expect(error.resetsAt).toBeUndefined()
+  })
+
+  it('ignores a details value of the wrong type instead of exposing it as a number', () => {
+    const error = mapErrorResponse(
+      402,
+      { code: 'free_messages_exhausted', details: { limit: 'ten', used: 10 } },
+      REQUEST_ID
+    ) as RoutaBillingError
+
+    expect(error.limit).toBeUndefined()
+    expect(error.used).toBe(10)
+  })
+})
+
+describe('mapErrorResponse — 409 is a RoutaConflictError', () => {
+  it('exposes details.reason of project_not_deletable', () => {
+    const error = mapErrorResponse(
+      409,
+      {
+        code: 'project_not_deletable',
+        type: 'conflict_error',
+        details: { reason: 'has_enabled_channel' },
+      },
+      REQUEST_ID
+    )
+
+    expect(error).toBeInstanceOf(RoutaConflictError)
+    expect(error).toBeInstanceOf(RoutaApiError)
+    expect((error as RoutaConflictError).reason).toBe('has_enabled_channel')
+  })
+
+  it('leaves reason undefined when the conflict has none', () => {
+    const error = mapErrorResponse(
+      409,
+      { code: 'template_not_editable' },
+      REQUEST_ID
+    ) as RoutaConflictError
+
+    expect(error.reason).toBeUndefined()
+  })
+})
+
 describe('mapErrorResponse — docUrl', () => {
   it('propagates docUrl when present', () => {
     const error = mapErrorResponse(
@@ -188,6 +327,8 @@ describe('mapErrorResponse — unmapped statuses never guess a subtype', () => {
       expect(error).not.toBeInstanceOf(RoutaAuthenticationError)
       expect(error).not.toBeInstanceOf(RoutaInvalidRequestError)
       expect(error).not.toBeInstanceOf(RoutaRateLimitError)
+      expect(error).not.toBeInstanceOf(RoutaBillingError)
+      expect(error).not.toBeInstanceOf(RoutaConflictError)
       expect(error).not.toBeInstanceOf(RoutaProviderError)
       expect(error.constructor).toBe(RoutaApiError)
     }
