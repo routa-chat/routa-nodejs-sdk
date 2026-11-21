@@ -52,9 +52,13 @@ What is skipped without the fixture: sending a message and reading `origin`/`fai
 
 `402 billing_error` on `messages.send()` cannot be provoked against the reference API for the same reason, and for one more: the API resolves the channel first, and a test project is never refused for billing, so it takes a live project that has spent its free messages. Spending those on the fixture project would break every other scenario. The `402` scenario (`billing-error.test.ts`) therefore serves an assembled response from a local server, built from the documented error envelope; its header comment says so.
 
+### The packed tarball
+
+`tests/unit/architecture/package-entries.test.ts` rebuilds `dist/`, runs `npm pack`, installs the tarball in an empty temporary project (offline: the package has no dependencies) and imports `Routa` and `RoutaPartner` from it, in ESM and in CJS. It also checks that the tarball holds only `dist/`, `README.md`, `LICENSE` and `package.json`. It takes about two seconds and needs `npm` on the `PATH`, which comes with Node. `publint` and `attw` (`pnpm check:package`) check the same package from the outside.
+
 ### README code blocks
 
-`tests/unit/readme` compiles every `ts` block of `README.md` against the source, with the repository's strict compiler options. It type-checks and does not run them: the blocks hold placeholders (`rt_live_...`, `chan_...`) and need a real channel. A block that no longer compiles fails `pnpm check`, with the README line it starts at.
+`tests/unit/readme` compiles every `ts` block of `README.md` against the source (`@routa-chat/sdk` and `@routa-chat/sdk/partner` both map to `src/`), with the repository's strict compiler options. It type-checks and does not run them: the blocks hold placeholders (`rt_live_...`, `chan_...`) and need a real channel. A block that no longer compiles fails `pnpm check`, with the README line it starts at.
 
 ### What this means for you
 
