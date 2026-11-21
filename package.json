@@ -58,6 +58,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
+    "openapi:diff": "node scripts/openapi-diff.ts",
     "test:types": "vitest --typecheck --run tests/types",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:types && pnpm run build",
     "prepublishOnly": "pnpm run check",
