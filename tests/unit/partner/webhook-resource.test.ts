@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { partnerWith } from './support'
+import { RoutaSignatureVerificationError } from '../../../src/domain/errors/routa-signature-verification-error'
+import { buildSignatureHeader } from '../../../src/webhooks/signature-verifier'
+import { PROJECT_ID, partnerWith } from './support'
 
 const RAW_WEBHOOK = {
   id: 'whe_01J8XA1B2C3D4E5F6G7H8J9K0M',
@@ -91,5 +93,58 @@ describe('webhook.rotateSecret()', () => {
     expect(requests[0]?.method).toBe('POST')
     expect(requests[0]?.url.pathname).toBe('/v1/partner/webhook/rotate_secret')
     expect(webhook.secret).toBe('whsec_new')
+  })
+})
+
+describe('webhook.constructEvent()', () => {
+  const SECRET = 'whsec_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const body = JSON.stringify({
+    id: 'evt_01J8XA1B2C3D4E5F6G7H8J9K0M',
+    type: 'message.accepted',
+    api_version: '2026-01-01',
+    schema_version: 1,
+    project_id: PROJECT_ID,
+    external_ref: 'lead_123',
+    sequence: 1,
+    occurred_at: '2026-09-12T12:00:00.000Z',
+    recorded_at: '2026-09-12T12:00:01.000Z',
+    data: { messageId: 'msg_1' },
+  })
+
+  async function signed(payload: string): Promise<string> {
+    return buildSignatureHeader(
+      [SECRET],
+      Math.floor(Date.now() / 1000),
+      new TextEncoder().encode(payload)
+    )
+  }
+
+  it('verifies a delivery without a network call and exposes the customer', async () => {
+    const { partner, requests } = partnerWith([])
+
+    const event = await partner.webhook.constructEvent(
+      body,
+      await signed(body),
+      SECRET
+    )
+
+    expect(event).toMatchObject({
+      type: 'message.accepted',
+      projectId: PROJECT_ID,
+      externalRef: 'lead_123',
+    })
+    expect(requests).toHaveLength(0)
+  })
+
+  it('rejects a body that was not what was signed', async () => {
+    const { partner } = partnerWith([])
+
+    await expect(
+      partner.webhook.constructEvent(
+        body.replace('msg_1', 'msg_2'),
+        await signed(body),
+        SECRET
+      )
+    ).rejects.toThrow(RoutaSignatureVerificationError)
   })
 })

@@ -1,3 +1,4 @@
+import type { RoutaEvent } from '../../event/event'
 import type { HttpClient } from '../../http/http-client'
 import type { Webhook, WebhookWithSecret } from '../../webhook/webhook'
 import {
@@ -6,6 +7,10 @@ import {
   type RawWebhook,
   type RawWebhookWithSecret,
 } from '../../webhook/webhook-mapper'
+import {
+  constructEvent,
+  type WebhookSigningSecret,
+} from '../../webhooks/construct-event'
 import {
   type PartnerWebhookSetResult,
   type SetPartnerWebhookParams,
@@ -20,7 +25,8 @@ import {
  * scope. Orchestrates `http` — no transport logic of its own.
  *
  * It returns the same `Webhook` as `routa.webhooks.*` and is verified the
- * same way, with `constructEvent()`.
+ * same way, with `constructEvent()` — here on `partner.webhook`, so a partner
+ * needs no `Routa` (and no project key) to check a delivery.
  */
 export class PartnerWebhookResource {
   constructor(private readonly http: HttpClient) {}
@@ -59,5 +65,21 @@ export class PartnerWebhookResource {
       path: '/v1/partner/webhook/rotate_secret',
     })
     return parseWebhookWithSecret(raw)
+  }
+
+  /**
+   * Verifies a delivery of the organization's webhook and returns its typed
+   * `RoutaEvent` (`projectId` and `externalRef` say which customer it is
+   * about). Makes no network call: it runs locally over the bytes already
+   * received, with the secret `set()` or `rotateSecret()` returned. Identical
+   * to `routa.webhooks.constructEvent()`; see `constructEvent()`'s own
+   * documentation for the raw-body requirement.
+   */
+  constructEvent(
+    rawBody: string | Uint8Array,
+    signatureHeader: string | null,
+    secret: WebhookSigningSecret
+  ): Promise<RoutaEvent> {
+    return constructEvent(rawBody, signatureHeader, secret)
   }
 }
