@@ -141,6 +141,58 @@ if (message.content) {
 
 Removal cannot be undone, and events (`message.*`) are not affected: they carry the message as it was when the event happened.
 
+### Upload media
+
+`routa.media.upload()` stores a file in Routa and returns a `Media`. Send the bytes yourself, with their content type:
+
+```ts
+import { readFile } from 'node:fs/promises'
+
+const media = await routa.media.upload({
+  file: await readFile('./photo.png'), // a Uint8Array (a Buffer is one) or a Blob
+  contentType: 'image/png',
+})
+console.log(media.id, media.status) // med_… 'ready'
+```
+
+Or give Routa a URL to download and re-host:
+
+```ts
+const media = await routa.media.upload({ sourceUrl: 'https://example.com/photo.png' })
+```
+
+The upload is synchronous: the returned `Media` is already `ready` and has a signed `url` (valid for 15 minutes; `routa.media.retrieve(media.id)` issues a fresh one). The API key needs the `media:write` scope. The mode is a choice, not a mix: `file` always comes with `contentType`, and `sourceUrl` comes alone — anything else does not compile. `contentType` is what tells the API the type; a `Blob`'s own `type` is not read. Streams are not accepted, only a whole `Uint8Array` or `Blob`.
+
+**`messages.send()` does not accept media yet.** The upload is useful today to keep the `id`, but no message method in this SDK sends it.
+
+The SDK checks neither size nor type; the API does, and a refused upload throws a `RoutaInvalidRequestError` with status `422`. Its `code` says why:
+
+| `code` | Meaning |
+| --- | --- |
+| `media_content_type_rejected` | `contentType` is not a supported type, or the file's first bytes do not match it (a PNG declared as `image/jpeg`). |
+| `media_size_limit_exceeded` | The file is over its type's cap: 5 MiB for JPEG and PNG, 500 KiB for WebP, 16 MiB for video and audio, 100 MiB for documents. |
+| `media_source_url_invalid` | `sourceUrl` is empty or not a usable URL. |
+| `media_source_blocked` | `sourceUrl` points at an address Routa will not fetch from, such as a private network. |
+| `media_source_unreachable` | Routa could not download `sourceUrl`. |
+
+```ts
+import { RoutaInvalidRequestError } from '@routa-chat/sdk'
+
+try {
+  await routa.media.upload({ file: bytes, contentType: 'image/png' })
+} catch (error) {
+  if (error instanceof RoutaInvalidRequestError && error.code === 'media_size_limit_exceeded') {
+    // Resize or compress, then try again.
+  } else {
+    throw error
+  }
+}
+```
+
+A body larger than the endpoint's ceiling (100 MiB) is refused before it is read, with status `413` and code `payload_too_large`. There is no dedicated class for it, so it arrives as a plain `RoutaApiError`.
+
+An upload is **not idempotent**: `POST /v1/media` ignores `Idempotency-Key`, so the SDK sends none. Like every request, it is retried after a network failure or a `5xx`; if the first attempt had stored the file and only the response was lost, the retry stores it again under a new `id`. Set `maxRetries: 0` if you would rather risk a failed upload than a duplicate.
+
 ### Webhooks
 
 Register an HTTPS endpoint and keep the signing secret. It is returned once, when the webhook is created (and again when you rotate it):
@@ -287,8 +339,7 @@ Node.js **22 or later** (`engines.node` is `>=22`). The package ships both ESM a
 
 Be aware of these gaps before you build on the SDK:
 
-- **Media upload.** `routa.media.retrieve(id)` works, but there is no `media.upload()`.
-- **Sending media, location or reactions.** `messages.send()` accepts only `text` and `template`. Received and historical messages of these kinds are readable, but you cannot send them.
+- **Sending media, location or reactions.** `messages.send()` accepts only `text` and `template`. You can [upload media](#upload-media) and keep its `id`, but no message can reference it yet. Received and historical messages of these kinds are readable, but you cannot send them.
 - **Channels.** There is no `routa.channels` namespace. Connect and manage channels in the dashboard, then pass the channel id to `send()`.
 
 ## Contributing

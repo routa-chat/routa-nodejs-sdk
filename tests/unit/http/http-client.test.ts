@@ -131,6 +131,214 @@ describe('requestWithHeaders', () => {
     expect(result.data).toEqual({ id: 'msg_1' })
     expect(result.headers.get('Idempotent-Replay')).toBe('true')
   })
+
+  it('exposes the HTTP status of the successful response', async () => {
+    const fetchSpy = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ id: 'med_1' }, {}, 201))
+    const client = buildClient(fetchSpy)
+
+    const result = await client.requestWithHeaders({
+      method: 'POST',
+      path: '/v1/media',
+      body: { source_url: 'https://example.com/a.png' },
+    })
+
+    expect(result.status).toBe(201)
+  })
+
+  it('reports a bodyless 204 as status 204 with no data', async () => {
+    const fetchSpy = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const client = buildClient(fetchSpy)
+
+    const result = await client.requestWithHeaders({
+      method: 'DELETE',
+      path: '/v1/things/1',
+    })
+
+    expect(result.status).toBe(204)
+    expect(result.data).toBeUndefined()
+  })
+})
+
+describe('request — PUT', () => {
+  it('sends a PUT with its JSON body', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}))
+    const client = buildClient(fetchSpy)
+
+    await client.request({
+      method: 'PUT',
+      path: '/v1/things/1',
+      body: { a: 1 },
+    })
+
+    const init = fetchSpy.mock.calls[0]?.[1]
+    expect(init?.method).toBe('PUT')
+    expect(init?.body).toBe('{"a":1}')
+  })
+})
+
+describe('request — raw body', () => {
+  const PNG_BYTES = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ])
+
+  it('sends a Uint8Array as-is, under the given Content-Type, without JSON-encoding it', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}))
+    const client = buildClient(fetchSpy)
+
+    await client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: PNG_BYTES, contentType: 'image/png' },
+    })
+
+    const call = fetchSpy.mock.calls[0]
+    expect(headerFromCall(call, 'Content-Type')).toBe('image/png')
+    expect(call?.[1]?.body).toBe(PNG_BYTES)
+  })
+
+  it('sends a Blob as-is, under the given Content-Type, without JSON-encoding it', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}))
+    const client = buildClient(fetchSpy)
+    const blob = new Blob([PNG_BYTES], { type: 'image/png' })
+
+    await client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: blob, contentType: 'image/png' },
+    })
+
+    const call = fetchSpy.mock.calls[0]
+    expect(headerFromCall(call, 'Content-Type')).toBe('image/png')
+    expect(call?.[1]?.body).toBe(blob)
+  })
+
+  it('uses the raw body content type, not application/json, and still sends the bearer token', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}))
+    const client = buildClient(fetchSpy)
+
+    await client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: PNG_BYTES, contentType: 'application/pdf' },
+    })
+
+    const call = fetchSpy.mock.calls[0]
+    expect(headerFromCall(call, 'Content-Type')).toBe('application/pdf')
+    expect(headerFromCall(call, 'Authorization')).toBe('Bearer rt_test_123')
+  })
+
+  it('puts the bytes on the wire intact (what a real fetch would transmit)', async () => {
+    let received: Uint8Array | undefined
+    let receivedContentType: string | null = null
+    let receivedContentLength: string | null = null
+    // Hands the request to a real `Request`, which serialises the body exactly
+    // as `fetch` would, instead of just inspecting the `RequestInit`.
+    const fetchSpy: typeof fetch = async (input, init) => {
+      const request = new Request(input, init)
+      receivedContentType = request.headers.get('Content-Type')
+      receivedContentLength = request.headers.get('Content-Length')
+      received = new Uint8Array(await request.arrayBuffer())
+      return jsonResponse({})
+    }
+    const client = buildClient(fetchSpy)
+
+    await client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: PNG_BYTES, contentType: 'image/png' },
+    })
+
+    expect(receivedContentType).toBe('image/png')
+    expect(Array.from(received ?? [])).toEqual(Array.from(PNG_BYTES))
+    // `Request` does not add Content-Length itself; the transport (undici)
+    // derives it from the fixed-size body when it sends. What matters here is
+    // that the body is a fixed-size one, never a stream.
+    expect(
+      receivedContentLength === null || receivedContentLength === '8'
+    ).toBe(true)
+  })
+
+  it('does not set Content-Type for a request with no body', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}))
+    const client = buildClient(fetchSpy)
+
+    await client.request({ method: 'GET', path: '/v1/whoami' })
+
+    expect(
+      headerFromCall(fetchSpy.mock.calls[0], 'Content-Type')
+    ).toBeUndefined()
+  })
+
+  it('re-sends the same bytes on a retry after a 503', async () => {
+    vi.useFakeTimers()
+    const fetchSpy = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(errorResponse(503))
+      .mockResolvedValueOnce(jsonResponse({ id: 'med_1' }, {}, 202))
+    const client = buildClient(fetchSpy)
+
+    const promise = client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: PNG_BYTES, contentType: 'image/png' },
+    })
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    const [first, second] = fetchSpy.mock.calls
+    expect(first?.[1]?.body).toBe(PNG_BYTES)
+    expect(second?.[1]?.body).toBe(PNG_BYTES)
+    expect(headerFromCall(second, 'Content-Type')).toBe('image/png')
+  })
+
+  it('re-sends the same Blob, with its full contents, on a retry after a network failure', async () => {
+    vi.useFakeTimers()
+    const blob = new Blob([PNG_BYTES], { type: 'image/png' })
+    const bodies: string[] = []
+    // Reads each attempt's body the way a real transport would, so a body that
+    // the first attempt consumed would show up as empty on the second.
+    const fetchSpy: typeof fetch = async (input, init) => {
+      const request = new Request(input, init)
+      bodies.push(Buffer.from(await request.arrayBuffer()).toString('hex'))
+      if (bodies.length === 1) {
+        throw new TypeError('fetch failed')
+      }
+      return jsonResponse({ id: 'med_1' })
+    }
+    const client = buildClient(fetchSpy)
+
+    const promise = client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: blob, contentType: 'image/png' },
+    })
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(bodies).toHaveLength(2)
+    expect(bodies[0]).toBe(Buffer.from(PNG_BYTES).toString('hex'))
+    expect(bodies[1]).toBe(bodies[0])
+  })
+
+  it('attaches an Idempotency-Key to a raw body request only when the caller marks it eligible', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}))
+    const client = buildClient(fetchSpy)
+
+    await client.request({
+      method: 'POST',
+      path: '/v1/media',
+      rawBody: { data: PNG_BYTES, contentType: 'image/png' },
+    })
+
+    expect(
+      headerFromCall(fetchSpy.mock.calls[0], 'Idempotency-Key')
+    ).toBeUndefined()
+  })
 })
 
 describe('request — idempotency key', () => {

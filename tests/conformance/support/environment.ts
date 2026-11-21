@@ -18,8 +18,8 @@
  * requires a provider OAuth round trip no automated suite can perform.
  *
  * The reference API limits sign-ups per IP (5 an hour by default), and every
- * conformance file signs up from the same address. A full run signs up 3
- * organizations (4 with the webhook signer configured), so it fits under the
+ * conformance file signs up from the same address. A full run signs up 4
+ * organizations (5 with the webhook signer configured), so it fits under the
  * default once an hour. To run the suite repeatedly, start the reference API
  * with a higher limit:
  *

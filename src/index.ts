@@ -31,6 +31,11 @@ export type { Media, MediaStatus } from './media/media'
 export type { MediaId } from './media/media-id'
 export { isMediaId, toMediaId } from './media/media-id'
 export { MediaResource } from './media/media-resource'
+export type {
+  UploadMediaFileParams,
+  UploadMediaParams,
+  UploadMediaUrlParams,
+} from './media/upload-media'
 
 export type { ListMessagesParams } from './message/list-messages'
 export type {
@@ -68,6 +73,12 @@ export type {
 } from './template/template-components'
 export type { TemplateId } from './template/template-id'
 export { isTemplateId, toTemplateId } from './template/template-id'
+export type { TemplateMedia } from './template/template-media'
+export type { TemplateMediaId } from './template/template-media-id'
+export {
+  isTemplateMediaId,
+  toTemplateMediaId,
+} from './template/template-media-id'
 export { TemplatesResource } from './template/templates-resource'
 
 export type { Usage, UsageParams, UsageRecord } from './usage-resource'
