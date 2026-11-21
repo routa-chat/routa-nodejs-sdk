@@ -5,7 +5,9 @@
  *
  *   ROUTA_TEST_BASE_URL    - defaults to http://localhost:3000
  *   ROUTA_TEST_API_KEY     - a real API key for that instance (messages:write,
- *                            messages:read, webhooks:write, events:read)
+ *                            messages:read, webhooks:write, events:read; add
+ *                            templates:write and templates:read for the
+ *                            rich-templates scenarios)
  *   ROUTA_TEST_CHANNEL_ID  - an active, text-capable channel id to send through
  *   ROUTA_TEST_TO          - an E.164 recipient the channel is allowed to message
  *
@@ -18,10 +20,10 @@
  * requires a provider OAuth round trip no automated suite can perform.
  *
  * The reference API limits sign-ups per IP (5 an hour by default), and every
- * conformance file signs up from the same address. A full run signs up 4
- * organizations (5 with the webhook signer configured), so it fits under the
- * default once an hour. To run the suite repeatedly, start the reference API
- * with a higher limit:
+ * conformance file signs up from the same address. A full run signs up 5
+ * organizations (6 with the webhook signer configured), so it fits under the
+ * default once an hour, but only without the signer. To run the suite
+ * repeatedly, or with the signer, start the reference API with a higher limit:
  *
  *   AUTH_RATE_LIMIT_SIGNUP_IP_LIMIT=1000
  *   AUTH_RATE_LIMIT_SIGNUP_IP_WINDOW_SECONDS=3600   (optional)

@@ -56,6 +56,45 @@ describe('parseTemplate() — body_text', () => {
 })
 
 describe('parseTemplate() — components (read shape)', () => {
+  it('reads a template with header, footer and buttons field by field', () => {
+    const template = parseTemplate(
+      rawTemplate({
+        components: {
+          header: {
+            kind: 'media',
+            format: 'video',
+            media_id: 'tmedia_01J8XA1B2C3D4E5F6G7H8J9K0M',
+          },
+          footer: { text: 'Reply STOP to opt out' },
+          buttons: [
+            { kind: 'quick_reply', text: 'Thanks' },
+            { kind: 'url', text: 'Track', url: 'https://example.com/{{1}}' },
+          ],
+        },
+      })
+    )
+
+    const header = template.components?.header
+    expect(header?.kind === 'media' ? header.format : undefined).toBe('video')
+    expect(header?.kind === 'media' ? header.media_id : undefined).toBe(
+      'tmedia_01J8XA1B2C3D4E5F6G7H8J9K0M'
+    )
+    expect(template.components?.footer?.text).toBe('Reply STOP to opt out')
+    expect(template.components?.buttons?.map(button => button.kind)).toEqual([
+      'quick_reply',
+      'url',
+    ])
+  })
+
+  it('leaves out a part the API did not send', () => {
+    const template = parseTemplate(
+      rawTemplate({ components: { footer: { text: 'f' } } })
+    )
+
+    expect(template.components).toEqual({ footer: { text: 'f' } })
+    expect(template.components && 'header' in template.components).toBe(false)
+  })
+
   it('leaves components absent for a body-only template, never an empty object', () => {
     const template = parseTemplate(rawTemplate())
 
@@ -85,7 +124,7 @@ describe('parseTemplate() — components (read shape)', () => {
       const header = {
         kind: 'media',
         format,
-        media_id: 'tmed_01J8XA1B2C3D4E5F6G7H8J9K0M',
+        media_id: 'tmedia_01J8XA1B2C3D4E5F6G7H8J9K0M',
       } as const
 
       const template = parseTemplate(rawTemplate({ components: { header } }))

@@ -71,6 +71,12 @@ export type {
   TemplateHeader,
   TemplateHeaderMediaFormat,
 } from './template/template-components'
+export type {
+  TemplateButtonInput,
+  TemplateComponentsInput,
+  TemplateFooterInput,
+  TemplateHeaderInput,
+} from './template/template-components-input'
 export type { TemplateId } from './template/template-id'
 export { isTemplateId, toTemplateId } from './template/template-id'
 export type { TemplateMedia } from './template/template-media'
@@ -80,6 +86,7 @@ export {
   toTemplateMediaId,
 } from './template/template-media-id'
 export { TemplatesResource } from './template/templates-resource'
+export type { UploadTemplateMediaParams } from './template/upload-template-media'
 
 export type { Usage, UsageParams, UsageRecord } from './usage-resource'
 export { UsageResource } from './usage-resource'

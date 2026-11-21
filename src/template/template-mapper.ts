@@ -8,7 +8,10 @@ import type {
   TemplateUnsupportedComponent,
   TemplateVariable,
 } from './template'
-import type { TemplateComponents } from './template-components'
+import {
+  parseTemplateComponents,
+  type RawTemplateComponents,
+} from './template-components-mapper'
 import { toTemplateId } from './template-id'
 
 /** Wire shape of a template as returned by the API. */
@@ -21,7 +24,7 @@ export interface RawTemplate {
   readonly body_text: string | null
   readonly variables: readonly TemplateVariable[]
   /** Absent for a body-only template — the API never sends an empty object. */
-  readonly components?: TemplateComponents | undefined
+  readonly components?: RawTemplateComponents | undefined
   readonly status: TemplateStatus
   readonly rejection_reason: TemplateRejectionReason | null
   readonly failure_code: TemplateFailureCode | null
@@ -45,7 +48,9 @@ export function parseTemplate(raw: RawTemplate): Template {
     category: raw.category,
     bodyText: raw.body_text,
     variables: raw.variables,
-    ...(raw.components !== undefined ? { components: raw.components } : {}),
+    ...(raw.components !== undefined
+      ? { components: parseTemplateComponents(raw.components) }
+      : {}),
     status: raw.status,
     rejectionReason: raw.rejection_reason,
     failureCode: raw.failure_code,

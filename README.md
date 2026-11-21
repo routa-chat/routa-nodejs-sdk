@@ -193,6 +193,70 @@ A body larger than the endpoint's ceiling (100 MiB) is refused before it is read
 
 An upload is **not idempotent**: `POST /v1/media` ignores `Idempotency-Key`, so the SDK sends none. Like every request, it is retried after a network failure or a `5xx`; if the first attempt had stored the file and only the response was lost, the retry stores it again under a new `id`. Set `maxRetries: 0` if you would rather risk a failed upload than a duplicate.
 
+### Create a template
+
+`routa.templates.submit()` sends a template to WhatsApp for review. Besides the body it takes `components`: a header (text, or an image, video or document), a footer, and up to 10 buttons. Leave `components` out for a body-only template.
+
+To use an image as the header, upload it first with `routa.templates.uploadMedia()`, then reference its `id`:
+
+```ts
+import { readFile } from 'node:fs/promises'
+
+const media = await routa.templates.uploadMedia({
+  file: await readFile('./header.png'), // a Uint8Array (a Buffer is one) or a Blob
+  contentType: 'image/png',
+})
+
+const template = await routa.templates.submit({
+  channel: 'chan_...',
+  name: 'order_shipped',
+  language: 'en_US',
+  category: 'utility',
+  bodyText: 'Your order has shipped.',
+  components: {
+    header: { kind: 'media', mediaId: media.id },
+    footer: { text: 'Reply STOP to opt out' },
+    buttons: [
+      { kind: 'quick_reply', text: 'Thanks' },
+      { kind: 'url', text: 'Track', url: 'https://example.com/track' },
+    ],
+  },
+})
+console.log(template.id, template.status) // tmpl_… 'submitted'
+```
+
+The answer is `submitted`, **not** `approved`: Routa records the template and sends it to WhatsApp afterwards, and WhatsApp decides later. Follow the `template.*` events — see [Webhooks](#webhooks) — to learn when it becomes `approved`, `rejected` or `failed`. A template that ends up `failed` (read `failureCode`) can only be corrected in the dashboard.
+
+Header, footer and buttons are typed by `kind`, so a field a kind needs cannot be left out:
+
+| Component | Shape |
+| --- | --- |
+| Header, text | `{ kind: 'text', text }` |
+| Header, media | `{ kind: 'media', mediaId }` — the `id` of a `TemplateMedia` from `uploadMedia()`. A `MediaId` from `media.upload()` does not compile here |
+| Footer | `{ text }` |
+| Button, quick reply | `{ kind: 'quick_reply', text }` |
+| Button, phone | `{ kind: 'phone_number', text, phoneNumber }` |
+| Button, link | `{ kind: 'url', text, url }` |
+
+A template you read back (`submit()`, `retrieve()`, `list()`) carries the same parts in `template.components`, in the API's own field names (`media_id`, `phone_number`), and a media header also has its `format` (`image`, `video` or `document`), which the API derives from the upload. `components` is absent for a body-only template.
+
+`uploadMedia()` needs the `templates:write` scope, like `submit()`. Its `contentType` is `image/jpeg` or `image/png` (up to 5 MiB), `video/mp4` (16 MiB) or `application/pdf` (100 MiB); the API derives the header format from it. Unlike `media.upload()` it takes bytes only, no `sourceUrl`.
+
+The SDK checks only the shape, not the rules: lengths, the number of buttons, URL and phone formats, the name and the body are judged by the API, which answers `RoutaInvalidRequestError` with status `422`:
+
+| `code` | `param` | Meaning |
+| --- | --- | --- |
+| `template_name_invalid` | `name` | The name breaks WhatsApp's naming rules. |
+| `template_components_invalid` | `body_text`, `components.header`, `components.footer` or `components.buttons` | A component breaks a rule. `param` names the component, not the item inside it (there is no `components.buttons.0.url`): the `message` says what is wrong, and only the first problem found is reported. |
+| `template_variables_invalid`, `capability_unsupported` | — | The body's placeholders are not valid, or the channel cannot send templates. |
+| `template_media_invalid` (from `uploadMedia()`) | — | `contentType` is not supported, the file's first bytes do not match it, or it is over its type's cap. |
+
+A `mediaId` that does not exist in your project — including one uploaded in another project — is `404 template_media_not_found`, also a `RoutaInvalidRequestError`. The API checks the channel first, so an unknown channel answers `404 channel_not_found` whatever the `mediaId`.
+
+Neither `submit()` nor `uploadMedia()` is idempotent: these routes ignore `Idempotency-Key`, so the SDK sends none. Like every request, they are retried after a network failure or a `5xx`; if the first attempt had gone through and only the response was lost, the retry creates a second template (a new `tmpl_…` with the same name) or stores the file again. Set `maxRetries: 0` if you would rather risk a failed call than a duplicate, and `list()` the templates before resubmitting after an error you could not read.
+
+Editing, deleting and syncing templates are not available: the API offers them only to a logged-in dashboard session, not to an API key.
+
 ### Webhooks
 
 Register an HTTPS endpoint and keep the signing secret. It is returned once, when the webhook is created (and again when you rotate it):
@@ -340,6 +404,7 @@ Node.js **22 or later** (`engines.node` is `>=22`). The package ships both ESM a
 Be aware of these gaps before you build on the SDK:
 
 - **Sending media, location or reactions.** `messages.send()` accepts only `text` and `template`. You can [upload media](#upload-media) and keep its `id`, but no message can reference it yet. Received and historical messages of these kinds are readable, but you cannot send them.
+- **Editing, deleting or syncing templates.** You can submit, read and list them, but changing or removing one is dashboard-only: the API does not offer it to an API key.
 - **Channels.** There is no `routa.channels` namespace. Connect and manage channels in the dashboard, then pass the channel id to `send()`.
 
 ## Contributing

@@ -1,9 +1,11 @@
+import type { TemplateMediaId } from './template-media-id'
+
 /**
  * The structured parts of a template, in the shape the API **returns** them.
- * Only the read side is modelled here — what a caller may send when
- * submitting a template is a separate contract. Keys stay in the API's own
- * snake_case (`media_id`, `phone_number`), as they do for `MessageContent`,
- * since nothing about them is reshaped on the way in.
+ * What a caller may send when submitting a template is a separate contract
+ * (`TemplateComponentsInput`, in `template-components-input.ts`). Keys stay in
+ * the API's own snake_case (`media_id`, `phone_number`), as they do for
+ * `MessageContent`, since nothing about them is reshaped on the way out.
  */
 
 /** Which kind of file a media header carries. */
@@ -15,8 +17,8 @@ export type TemplateHeader =
   | {
       readonly kind: 'media'
       readonly format: TemplateHeaderMediaFormat
-      /** The Routa media id the header was created from. */
-      readonly media_id: string
+      /** The `TemplateMedia` id the header was created from. */
+      readonly media_id: TemplateMediaId
     }
 
 /** The small grey line under a template's body. */

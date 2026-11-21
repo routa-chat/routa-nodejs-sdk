@@ -11,6 +11,7 @@ import type {
   TemplateComponents,
   TemplateHeader,
 } from '../../src/template/template-components'
+import type { TemplateMediaId } from '../../src/template/template-media-id'
 
 test('TemplateStatus is exhaustively discriminated, failed included', () => {
   function describe(status: TemplateStatus): string {
@@ -109,6 +110,7 @@ test('the read shape of header and buttons discriminates on kind', () => {
       case 'text':
         return value.text
       case 'media':
+        expectTypeOf(value.media_id).toEqualTypeOf<TemplateMediaId>()
         return `${value.format}:${value.media_id}`
       default: {
         const exhaustiveCheck: never = value

@@ -49,7 +49,7 @@ Some conformance tests need none of this and always run. They use a local HTTP s
 
 With a local Routa API instance running, `pnpm test` picks it up on its own.
 
-Each run signs up a few organizations on that instance (3, or 4 with the webhook signer configured). The API limits sign-ups to 5 an hour per IP by default, so a second run within the hour fails with an error that names the limit. To run the suite repeatedly, start the API with a higher limit:
+Each run signs up a few organizations on that instance (5, or 6 with the webhook signer configured). The API limits sign-ups to 5 an hour per IP by default, so a second run within the hour fails with an error that names the limit. To run the suite repeatedly, start the API with a higher limit:
 
 ```bash
 # in apps/api of the Routa repository
