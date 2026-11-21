@@ -8,8 +8,15 @@
  *                            messages:read, webhooks:write, events:read; add
  *                            templates:write and templates:read for the
  *                            rich-templates scenarios)
- *   ROUTA_TEST_CHANNEL_ID  - an active, text-capable channel id to send through
+ *   ROUTA_TEST_CHANNEL_ID  - an active channel id to send through. It needs the
+ *                            `text` capability and, for the template scenarios,
+ *                            `template` as well — without it they fail with
+ *                            422 capability_unsupported instead of skipping.
+ *                            Use a project with environment `test`: a live one
+ *                            stops accepting messages (402) after 10 free ones
  *   ROUTA_TEST_TO          - an E.164 recipient the channel is allowed to message
+ *   ROUTA_TEST_MEDIA_SOURCE_URL - optional; a small public PNG/JPEG the API may
+ *                            download, for the upload-by-`sourceUrl` scenario
  *
  * Every scenario that only needs *some* authenticated project (not
  * necessarily one with a working channel) provisions its own fresh
@@ -17,7 +24,10 @@
  * variables — see `provisioning.ts`. Only scenarios that need a message to
  * actually reach `accepted` depend on `ROUTA_TEST_API_KEY`/
  * `ROUTA_TEST_CHANNEL_ID`/`ROUTA_TEST_TO`, because connecting a real channel
- * requires a provider OAuth round trip no automated suite can perform.
+ * requires a provider OAuth round trip no automated suite can perform. (A
+ * `fake`-provider channel would not need one, but the API has no route that
+ * creates it — only a direct database insert — so it cannot be provisioned
+ * here either; CONTRIBUTING.md has the details.)
  *
  * The reference API limits sign-ups per IP (5 an hour by default), and every
  * conformance file signs up from the same address. A full run signs up 5
