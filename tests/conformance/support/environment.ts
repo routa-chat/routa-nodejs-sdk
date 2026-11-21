@@ -15,6 +15,14 @@
  *                            Use a project with environment `test`: a live one
  *                            stops accepting messages (402) after 10 free ones
  *   ROUTA_TEST_TO          - an E.164 recipient the channel is allowed to message
+ *   ROUTA_TEST_PARTNER_KEY - optional; a partner key (`rt_partner_…`) of an
+ *                            organization whose plan has `partnerApi`, with the
+ *                            scopes `projects:read`, `projects:write`,
+ *                            `api_keys:write` and `projects:delete`. Only the
+ *                            partner conformance scenarios use it; without it
+ *                            they are skipped. The suite cannot provision one:
+ *                            a partner key is issued by a person in the
+ *                            dashboard, and the plan is granted by an operator
  *   ROUTA_TEST_MEDIA_SOURCE_URL - optional; a small public PNG/JPEG the API may
  *                            download, for the upload-by-`sourceUrl` scenario
  *
@@ -52,6 +60,7 @@ export const BASE_URL =
 export const PRECONFIGURED_API_KEY = process.env['ROUTA_TEST_API_KEY']
 export const PRECONFIGURED_CHANNEL_ID = process.env['ROUTA_TEST_CHANNEL_ID']
 export const PRECONFIGURED_TO = process.env['ROUTA_TEST_TO']
+export const PARTNER_KEY = process.env['ROUTA_TEST_PARTNER_KEY']
 
 async function checkApiReachable(): Promise<boolean> {
   try {
@@ -73,6 +82,9 @@ export const hasChannelFixture =
   PRECONFIGURED_API_KEY !== undefined &&
   PRECONFIGURED_CHANNEL_ID !== undefined &&
   PRECONFIGURED_TO !== undefined
+
+/** Whether the Partner API scenarios can run: a reachable API and a partner key to authenticate with. */
+export const hasPartnerFixture = apiReachable && PARTNER_KEY !== undefined
 
 if (!apiReachable) {
   // biome-ignore lint/suspicious/noConsole: deliberate diagnostic, not leftover debugging — explains why the tests below report as skipped.

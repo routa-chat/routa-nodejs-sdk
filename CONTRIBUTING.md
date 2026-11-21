@@ -8,7 +8,7 @@ The repository pins its package manager (`packageManager` in `package.json`); us
 
 ```bash
 pnpm install
-pnpm check   # typecheck, lint, tests, type tests, build
+pnpm check   # typecheck, lint, tests, type tests, build, publint, attw
 ```
 
 `pnpm check` is what CI runs on every pull request, and it needs nothing beyond the repository: no API key, no network, no running Routa instance.
@@ -36,7 +36,8 @@ A conformance test that needs the API is **skipped, not failed**, when its envir
 1. **API reachable.** A request to `${ROUTA_TEST_BASE_URL}/docs/json` (default `http://localhost:3000`, 1 second timeout) must succeed. Any failure, including a timeout, skips every scenario that needs the API.
 2. **Channel fixture.** Scenarios that need a message to be accepted also need `ROUTA_TEST_API_KEY`, `ROUTA_TEST_CHANNEL_ID` and `ROUTA_TEST_TO`. Without all three they are skipped. The channel needs the `text` and `template` capabilities (the template scenarios fail with `422 capability_unsupported` without the latter, they do not skip), and its project should be a `test` one: a live project is refused with `402` after its 10 free messages.
 3. **Webhook signer.** The signature scenarios import the API's own signing code from the path in `ROUTA_SDK_CONFORMANCE_SIGNER_PATH`. Without it they are skipped.
-4. **Media source URL** (optional). Uploading media by `sourceUrl` needs a small public PNG or JPEG the API is allowed to download (it refuses private and loopback addresses), in `ROUTA_TEST_MEDIA_SOURCE_URL`. Without it that one scenario is skipped.
+4. **Partner key** (optional). The Partner API scenarios (`tests/conformance/partner.test.ts`) need `ROUTA_TEST_PARTNER_KEY`, a partner key (`rt_partner_…`) with the scopes `projects:read`, `projects:write`, `api_keys:write` and `projects:delete`, from an organization whose plan has `partnerApi`. The suite cannot provision one: a partner key is issued by a person in the dashboard, and an operator grants the plan. Without the key they are skipped. Each scenario creates projects under a fresh `externalRef` and the file deletes them at the end, so the organization's project limit needs room for a few.
+5. **Media source URL** (optional). Uploading media by `sourceUrl` needs a small public PNG or JPEG the API is allowed to download (it refuses private and loopback addresses), in `ROUTA_TEST_MEDIA_SOURCE_URL`. Without it that one scenario is skipped.
 
 Some conformance tests need none of this and always run. They use a local HTTP server that forces a `429` or a `402`, and the template header media scenarios provision their own project.
 
