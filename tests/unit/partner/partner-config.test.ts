@@ -32,12 +32,22 @@ describe('resolvePartnerConfig', () => {
     expect(resolved.fetch).toBe(customFetch)
   })
 
+  it('accepts the partner key as a string, with every default', () => {
+    const resolved = resolvePartnerConfig(PARTNER_KEY)
+
+    expect(resolved.apiKey).toBe(PARTNER_KEY)
+    expect(resolved.baseURL).toBe('https://api.routa.chat')
+    expect(resolved.timeout).toBe(30_000)
+    expect(resolved.maxRetries).toBe(3)
+  })
+
   it('throws synchronously when partnerKey is missing or empty', () => {
     // @ts-expect-error — `partnerKey` is required; a plain-JavaScript caller can still omit it.
     expect(() => resolvePartnerConfig({})).toThrow(/partnerKey.*required/)
     expect(() => resolvePartnerConfig({ partnerKey: '' })).toThrow(
       /partnerKey.*required/
     )
+    expect(() => resolvePartnerConfig('')).toThrow(/partnerKey.*required/)
   })
 
   it.each(['rt_live_abcdefghijklmnopqrstuv', 'rt_test_abcdefghijklmnopqrstuv'])(
@@ -49,8 +59,20 @@ describe('resolvePartnerConfig', () => {
     }
   )
 
+  it.each(['rt_live_abcdefghijklmnopqrstuv', 'rt_test_abcdefghijklmnopqrstuv'])(
+    'says a project API key (%s) belongs to Routa, given as a string too',
+    key => {
+      expect(() => resolvePartnerConfig(key)).toThrow(
+        /project API key.*Use `Routa`/s
+      )
+    }
+  )
+
   it('refuses any other value that is not a partner key', () => {
     expect(() => resolvePartnerConfig({ partnerKey: 'sk_whatever' })).toThrow(
+      /must be a partner key.*rt_partner_/
+    )
+    expect(() => resolvePartnerConfig('sk_whatever')).toThrow(
       /must be a partner key.*rt_partner_/
     )
   })
@@ -66,5 +88,7 @@ describe('resolvePartnerConfig', () => {
       /project API key/
     )
     expect(() => new RoutaPartner({ partnerKey: PARTNER_KEY })).not.toThrow()
+    expect(() => new RoutaPartner(PARTNER_KEY)).not.toThrow()
+    expect(() => new RoutaPartner('rt_live_abc')).toThrow(/project API key/)
   })
 })

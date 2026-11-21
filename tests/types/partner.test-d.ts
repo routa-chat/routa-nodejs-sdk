@@ -42,8 +42,10 @@ test('RoutaPartner takes a partnerKey and never an apiKey', () => {
   void new RoutaPartner({ apiKey: 'rt_partner_abc' })
   // @ts-expect-error — both at once is not accepted either.
   void new RoutaPartner({ partnerKey: 'rt_partner_abc', apiKey: 'rt_live_abc' })
-  // @ts-expect-error — no string shorthand: the credential is named on purpose.
+  // the string shorthand mirrors `new Routa(apiKey)`; it is the same `partnerKey`.
   void new RoutaPartner('rt_partner_abc')
+  // @ts-expect-error — the shorthand takes a string, nothing else.
+  void new RoutaPartner(42)
   // @ts-expect-error — an empty config has no credential.
   void new RoutaPartner({})
 })

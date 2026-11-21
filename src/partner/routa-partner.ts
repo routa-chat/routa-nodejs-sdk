@@ -1,6 +1,10 @@
 import { createHttpClient, type HttpClient } from '../http/http-client'
 import { PartnerChannelsResource } from './channel/partner-channels-resource'
-import { type PartnerConfig, resolvePartnerConfig } from './partner-config'
+import {
+  type PartnerConfig,
+  type PartnerConfigInput,
+  resolvePartnerConfig,
+} from './partner-config'
 import { ProjectsResource } from './project/projects-resource'
 import { PartnerWebhookResource } from './webhook/partner-webhook-resource'
 
@@ -16,7 +20,8 @@ import { PartnerWebhookResource } from './webhook/partner-webhook-resource'
  * ```ts
  * import { RoutaPartner } from '@routa-chat/sdk/partner'
  *
- * const partner = new RoutaPartner({ partnerKey: 'rt_partner_…' })
+ * const partner = new RoutaPartner('rt_partner_…')
+ * // or, to set other options: new RoutaPartner({ partnerKey, timeout: 10_000 })
  * const { project } = await partner.projects.create({
  *   name: 'Loja do Zé',
  *   externalRef: 'lead_123',
@@ -54,8 +59,12 @@ export class RoutaPartner {
   readonly channels: PartnerChannelsResource
   readonly webhook: PartnerWebhookResource
 
-  constructor(config: PartnerConfig) {
-    this.httpClient = createHttpClient(resolvePartnerConfig(config))
+  /** `new RoutaPartner({ partnerKey, ... })` — full configuration. */
+  constructor(config: PartnerConfig)
+  /** `new RoutaPartner(partnerKey)` — shorthand for `new RoutaPartner({ partnerKey })`, for the common case where no other option is needed. */
+  constructor(partnerKey: string)
+  constructor(input: PartnerConfigInput) {
+    this.httpClient = createHttpClient(resolvePartnerConfig(input))
     this.projects = new ProjectsResource(this.httpClient)
     this.channels = new PartnerChannelsResource(this.httpClient)
     this.webhook = new PartnerWebhookResource(this.httpClient)

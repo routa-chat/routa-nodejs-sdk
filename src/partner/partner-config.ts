@@ -21,15 +21,20 @@ export interface PartnerConfig extends RoutaTransportOptions {
   partnerKey: string
 }
 
+/** Accepted by the `RoutaPartner` constructor: a full config object, or just the partner key as shorthand for `{ partnerKey }`. */
+export type PartnerConfigInput = PartnerConfig | string
+
 /**
- * Validates `config` and fills in every default, failing synchronously if
+ * Validates `input` and fills in every default, failing synchronously if
  * `partnerKey` is missing, or is not a partner key. Resolves to the same
  * shape the transport already consumes, with the partner key as its Bearer
  * credential.
  */
 export function resolvePartnerConfig(
-  config: PartnerConfig
+  input: PartnerConfigInput
 ): ResolvedRoutaConfig {
+  const config: PartnerConfig =
+    typeof input === 'string' ? { partnerKey: input } : input
   const { partnerKey } = config
 
   if (!partnerKey) {
