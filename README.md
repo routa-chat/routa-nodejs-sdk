@@ -130,6 +130,8 @@ console.log(page.data.length, page.hasMore, page.nextCursor)
 Routa keeps message content for the number of days your plan includes, then removes it. The rest of the message stays: id, status, timestamps, addresses and `metadata`. A message whose content was removed has `content: null` and a `contentRedactedAt` timestamp, and it is returned by `retrieve()` and `list()` like any other, so guard `content` before reading it:
 
 ```ts
+import { toMessageId } from '@routa-chat/sdk'
+
 const message = await routa.messages.retrieve(toMessageId('msg_01J8XXXXXXXXXXXXXXXXXXXXXX'))
 
 if (message.content) {
@@ -398,6 +400,29 @@ const routa = new Routa({
 ## Node.js support
 
 Node.js **22 or later** (`engines.node` is `>=22`). The package ships both ESM and CommonJS builds with bundled type declarations, so it works with `import` and `require`. It relies on the platform `fetch` and Web Crypto APIs and has no runtime dependencies. TypeScript users get strict types for every request and response.
+
+## Upgrading from 0.2.0
+
+0.3.0 matches the SDK's types to the API's current contract. The SDK is 0.x, so changes to a public type ship as a minor; nothing was removed or renamed. The full list is in [CHANGELOG.md](CHANGELOG.md). What can stop your code compiling:
+
+- **`TemplateStatus` has a new member, `'failed'`**: Routa could not submit the template to WhatsApp. A `switch` over the status that ends in a `never` check needs the new case; `failureCode` and `failureDetail` say why.
+- **`EventType` goes from 13 to 17 members**: `template.failed`, `template.category_changed`, `template.updated` and `template.deleted` are new, and an exhaustive `switch (event.type)` must handle them.
+- **New required fields.** Reading a value is unaffected, but anything that *builds* one yourself, such as a test fixture, must supply them. `Template`: `bodyText` (`string | null`), `failureCode`, `failureDetail`, `deletionRequested`, `deletionFailureDetail`, `origin`, `readOnly` and `unsupportedComponents`; `components` is optional and absent for a body-only template. `Message`: `origin` (`'api'`, `'business_app'`, or `null` for an inbound message) and `failureCode`. Every event: `externalRef`, the project's `external_ref` or `null`.
+- **`402` and `409` have their own error classes**, `RoutaBillingError` and `RoutaConflictError`. Both extend `RoutaApiError`, so a `catch` on `RoutaApiError` still catches them; only code that compared `error.constructor` against `RoutaApiError` for these statuses notices. See [Error handling](#error-handling).
+
+```ts
+import type { Template } from '@routa-chat/sdk'
+
+function report(template: Template) {
+  if (template.status === 'failed') {
+    console.error(template.failureCode, template.failureDetail)
+  }
+  // `components` may be absent: guard it before reading header, footer or buttons.
+  console.log(template.bodyText, template.components?.buttons?.length ?? 0)
+}
+```
+
+New in 0.3.0: [`media.upload()`](#upload-media), and [`templates.uploadMedia()` with `components` on `templates.submit()`](#create-a-template).
 
 ## Not supported yet
 

@@ -34,10 +34,26 @@ pnpm check   # typecheck, lint, tests, type tests, build
 A conformance test that needs the API is **skipped, not failed**, when its environment is missing. It is decided in `tests/conformance/support/environment.ts`:
 
 1. **API reachable.** A request to `${ROUTA_TEST_BASE_URL}/docs/json` (default `http://localhost:3000`, 1 second timeout) must succeed. Any failure, including a timeout, skips every scenario that needs the API.
-2. **Channel fixture.** Scenarios that need a message to be accepted also need `ROUTA_TEST_API_KEY`, `ROUTA_TEST_CHANNEL_ID` and `ROUTA_TEST_TO`. Without all three they are skipped.
+2. **Channel fixture.** Scenarios that need a message to be accepted also need `ROUTA_TEST_API_KEY`, `ROUTA_TEST_CHANNEL_ID` and `ROUTA_TEST_TO`. Without all three they are skipped. The channel needs the `text` and `template` capabilities (the template scenarios fail with `422 capability_unsupported` without the latter, they do not skip), and its project should be a `test` one: a live project is refused with `402` after its 10 free messages.
 3. **Webhook signer.** The signature scenarios import the API's own signing code from the path in `ROUTA_SDK_CONFORMANCE_SIGNER_PATH`. Without it they are skipped.
+4. **Media source URL** (optional). Uploading media by `sourceUrl` needs a small public PNG or JPEG the API is allowed to download (it refuses private and loopback addresses), in `ROUTA_TEST_MEDIA_SOURCE_URL`. Without it that one scenario is skipped.
 
-Some conformance tests need none of this and always run. They use a local HTTP server that forces a `429`.
+Some conformance tests need none of this and always run. They use a local HTTP server that forces a `429` or a `402`, and the template header media scenarios provision their own project.
+
+### Why a channel fixture is needed
+
+The suite provisions everything it can over the same HTTP routes a dashboard uses: an organization, a project and API keys. It does **not** provision a channel, so every scenario that needs one depends on `ROUTA_TEST_CHANNEL_ID` and is skipped without it. This was checked against the reference API (`routa` at `db2b824`), not assumed:
+
+- The only route that creates a channel is the Meta Embedded Signup flow (`POST /v1/projects/{projectId}/channels/embedded_signup/start`, then the callback), an OAuth round trip with Meta. It always creates a `whatsapp_cloud` channel.
+- The `fake` provider exists and is registered in the API and the worker, but no route creates a channel that uses it. The only way to get one is to insert the row into Postgres directly (`tools/load-test/seed.ts` does). Provisioning through the database is a shortcut this suite does not take: it would need the database connection, and it would skip the very routes the SDK talks to.
+
+What is skipped without the fixture: sending a message and reading `origin`/`failureCode` back, the Quickstart, the two idempotency `409`s, the event `externalRef`, and everything that submits a template (components, the `404 template_media_not_found`, the `422`s with `param`). Scenarios that need only a project (error mapping, rate limit, media upload, template header media upload) do not depend on it.
+
+`402 billing_error` on `messages.send()` cannot be provoked against the reference API for the same reason, and for one more: the API resolves the channel first, and a test project is never refused for billing, so it takes a live project that has spent its free messages. Spending those on the fixture project would break every other scenario. The `402` scenario (`billing-error.test.ts`) therefore serves an assembled response from a local server, built from the documented error envelope; its header comment says so.
+
+### README code blocks
+
+`tests/unit/readme` compiles every `ts` block of `README.md` against the source, with the repository's strict compiler options. It type-checks and does not run them: the blocks hold placeholders (`rt_live_...`, `chan_...`) and need a real channel. A block that no longer compiles fails `pnpm check`, with the README line it starts at.
 
 ### What this means for you
 

@@ -10,8 +10,5 @@ Templates com componentes: `components` em `routa.templates.submit()` e `routa.t
 - `templates.uploadMedia()` stores a template header file (`POST /v1/templates/media`, scope `templates:write`) and returns a `TemplateMedia`. It takes `{ file: Blob | Uint8Array, contentType: string }` — bytes only, no `sourceUrl`. Every refusal is `422 template_media_invalid`; a body over 100 MiB is a base `RoutaApiError` with status `413`.
 - A `mediaId` that is not in the project is `404 template_media_not_found` (`RoutaInvalidRequestError`).
 - `submit()` answers with `status: 'submitted'`, not `approved`: follow the `template.*` events for the outcome. Neither `submit()` nor `uploadMedia()` reads `Idempotency-Key`, so a retry after a lost response can create a second template or store the file twice — set `maxRetries: 0` to avoid that.
-- `TemplateHeaderInput`, `TemplateFooterInput`, `TemplateButtonInput`, `TemplateComponentsInput` and `UploadTemplateMediaParams` are exported. The types that describe a template you read (`TemplateHeader`, `TemplateFooter`, `TemplateButton`, `TemplateComponents`) are unchanged, and keep the API's snake_case.
-
-**What changes**
-
-- In a template you read, a media header's `media_id` is now a `TemplateMediaId` instead of a `string`. It is still a string at runtime, and the type is new in the same unreleased line of changes as `contract-drift-types`, so no released version is affected.
+- `TemplateHeaderInput`, `TemplateFooterInput`, `TemplateButtonInput`, `TemplateComponentsInput` and `UploadTemplateMediaParams` are exported. The types that describe a template you read (`TemplateHeader`, `TemplateFooter`, `TemplateButton`, `TemplateComponents`, introduced by the contract update above) keep the API's snake_case; the `Input` ones are camelCase.
+- In a template you read, a media header's `media_id` is a `TemplateMediaId` (a string at runtime), so it can be passed back as a `mediaId`.

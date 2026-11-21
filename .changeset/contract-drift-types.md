@@ -8,6 +8,7 @@
 
 - `TemplateStatus` gains `'failed'` (the template could not be submitted to WhatsApp). A `switch` over it with a `never` check stops compiling until it handles the new member.
 - `EventType` goes from 13 to 17 members: `template.failed`, `template.category_changed`, `template.updated` and `template.deleted` are new, and `RoutaEvent` has a member for each. An exhaustive `switch (event.type)` needs them.
+- New **required** fields on types you read. Reading a `Template`, a `Message` or an event is unaffected; code that *builds* one itself — a test fixture, a mock of the SDK — stops compiling until it supplies them. `Template` gains `bodyText` (`string | null`), `failureCode`, `failureDetail`, `deletionRequested`, `deletionFailureDetail`, `origin`, `readOnly` and `unsupportedComponents` (`components` is optional); `Message` gains `origin` and `failureCode`; every known `RoutaEvent` gains `externalRef`.
 - `RoutaApiError` now also carries `type` and `details`, and `ErrorEnvelope` / `RoutaApiErrorDetails` accept them (both optional — a proxy's response has neither).
 - `402` and `409` responses are no longer a bare `RoutaApiError`. They are `RoutaBillingError` and `RoutaConflictError`, both subclasses of it, so a `catch` on `RoutaApiError` keeps working; only code that matched `error.constructor === RoutaApiError` for these statuses notices. Retry behaviour is unchanged: `402` is never retried, and `409` only for `idempotency_in_progress`.
 
@@ -17,6 +18,7 @@
 - `Message`: `origin` (`'api' | 'business_app' | null`) and `failureCode` (`string | null`).
 - Events: `externalRef`, the project's `external_ref`.
 - `RoutaBillingError` (`limit`, `used`, `resetsAt` — each only for the codes that define it) and `RoutaConflictError` (`reason`).
+- Newly exported types: `MessageOrigin`, `TemplateFailureCode`, `TemplateOrigin`, `TemplateUnsupportedComponent`, `TemplateComponents`, `TemplateHeader`, `TemplateFooter`, `TemplateButton`, `TemplateHeaderMediaFormat` and `RoutaErrorDetailValues`.
 
 **Migrating**
 
